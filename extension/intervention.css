@@ -1,0 +1,13 @@
+#ag-fade-overlay { position: fixed; inset: 0; background: #000; z-index: 2147483646; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; }
+#ag-mirror-overlay { position: fixed; inset: 0; z-index: 2147483647; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); font-family: 'Segoe UI', system-ui, sans-serif; }
+#ag-mirror-card { background: linear-gradient(145deg, #1a1a2e, #16213e); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 32px; max-width: 420px; width: 90%; color: #e0e0e0; box-shadow: 0 25px 60px rgba(0,0,0,0.5); }
+#ag-mirror-card h2 { font-size: 18px; margin-bottom: 16px; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#ag-mirror-stats { font-size: 14px; line-height: 1.8; margin-bottom: 20px; }
+#ag-mirror-stats span { color: #fbbf24; font-weight: 700; }
+#ag-recall-section { margin-bottom: 16px; display: none; }
+#ag-recall-input { width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; background: rgba(255,255,255,0.05); color: #e0e0e0; font-size: 14px; outline: none; }
+#ag-recall-input:focus { border-color: #a78bfa; }
+#ag-recall-goal { font-size: 12px; color: #888; margin-bottom: 8px; }
+#ag-dismiss-btn { padding: 10px 24px; border: none; border-radius: 8px; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; font-weight: 600; cursor: pointer; font-size: 14px; transition: transform 0.15s, box-shadow 0.15s; }
+#ag-dismiss-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(79,70,229,0.4); }
+#ag-dismiss-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
