@@ -26,6 +26,14 @@ def _rule_based(features):
     t = features.get('tab_switches_5min', 0)
     m = features.get('mouse_activity', 0)
     s = features.get('session_duration', 0)
+    
+    url = str(features.get('current_url', ''))
+    title = str(features.get('page_title', ''))
+    goal = str(features.get('current_goal', ''))
+    
+    is_distracting = any(d in url for d in fp.DISTRACTING_DOMAINS)
+    relevance = fp._get_relevance_score(title, goal)
+    
     score = 0
     if v > 15: score += 2
     elif v > 8: score += 1
@@ -34,6 +42,18 @@ def _rule_based(features):
     elif t > 4: score += 1
     if m < 2 and v > 5: score += 1
     if s > 30: score += 1
+    
+    if is_distracting:
+        if goal and relevance < 0.3:
+            score += 4
+        elif not goal:
+            score += 2
+        else:
+            score -= 1
+    else:
+        if goal and relevance > 0.5:
+            score -= 2
+
     if score >= 5: return 'gone'
     if score >= 2: return 'drifting'
     return 'focused'

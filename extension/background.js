@@ -1,4 +1,6 @@
-const state = { signals: [], tabSwitches: [], sessionStart: Date.now(), currentState: 'focused', lastStates: [], tabHistory: {} };
+const state = { signals: [], tabSwitches: [], sessionStart: Date.now(), currentState: 'focused', lastStates: [], tabHistory: {}, currentGoal: '' };
+
+chrome.storage.local.get(['currentGoal'], res => { if (res.currentGoal) state.currentGoal = res.currentGoal; });
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === 'SIGNALS') {
@@ -16,6 +18,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
   if (msg.type === 'SET_GOAL') {
     chrome.storage.local.set({ currentGoal: msg.goal });
+    state.currentGoal = msg.goal;
   }
   if (msg.type === 'INTERVENTION_RESULT') {
     fetch('http://localhost:5000/api/intervention', {
@@ -53,6 +56,10 @@ function buildFeatureVector() {
   const avgMouse = window5.reduce((a, s) => a + s.mouseActivity, 0) / window5.length;
   const avgDepth = window5.reduce((a, s) => a + s.scrollDepth, 0) / window5.length;
   const avgContent = window5.reduce((a, s) => a + s.contentLength, 0) / window5.length;
+  const recentSignal = window5[window5.length - 1];
+  const current_url = recentSignal ? recentSignal.url : '';
+  const page_title = recentSignal ? recentSignal.title : '';
+  const current_goal = state.currentGoal || '';
   const sessionMin = (now - state.sessionStart) / 60000;
   const hour = new Date().getHours() + new Date().getMinutes() / 60;
   return {
@@ -63,7 +70,10 @@ function buildFeatureVector() {
     session_duration: sessionMin,
     time_of_day: hour,
     content_length: avgContent,
-    scroll_depth_vs_time: window5.length > 0 ? avgDepth / (sessionMin || 1) : 0
+    scroll_depth_vs_time: window5.length > 0 ? avgDepth / (sessionMin || 1) : 0,
+    current_url,
+    page_title,
+    current_goal
   };
 }
 
