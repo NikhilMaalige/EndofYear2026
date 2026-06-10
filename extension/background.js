@@ -1,114 +1,73 @@
-const state = { signals: [], tabSwitches: [], sessionStart: Date.now(), currentState: 'focused', lastStates: [], tabHistory: {}, currentGoal: '' };
+(function () {
+  const S = { scrollY: 0, lastScrollY: 0, scrollEvents: [], mouseEvents: [], clicks: 0, dirChanges: 0, lastDir: 0, hoverStart: null, hoversWithoutClick: 0, keypresses: 0, lastActivityTime: Date.now() };
 
-chrome.storage.local.get(['currentGoal'], res => { if (res.currentGoal) state.currentGoal = res.currentGoal; });
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY, dy = y - S.lastScrollY, dir = Math.sign(dy);
+    if (dir !== 0 && dir !== S.lastDir && S.lastDir !== 0) S.dirChanges++;
+    S.lastDir = dir;
+    S.scrollEvents.push({ y, t: Date.now(), dy });
+    S.lastScrollY = y;
+    S.lastActivityTime = Date.now();
+  }, { passive: true });
 
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg.type === 'SIGNALS') {
-    state.signals.push({ ...msg.data, tabId: sender.tab?.id });
-  }
-  if (msg.type === 'LABEL') {
-    fetch('http://localhost:5000/api/label', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: msg.label, timestamp: Date.now() })
-    }).catch(() => {});
-  }
-  if (msg.type === 'GET_STATE') {
-    chrome.runtime.sendMessage({ type: 'STATE_UPDATE', state: state.currentState, stats: getStats() });
-  }
-  if (msg.type === 'SET_GOAL') {
-    chrome.storage.local.set({ currentGoal: msg.goal });
-    state.currentGoal = msg.goal;
-  }
-  if (msg.type === 'INTERVENTION_RESULT') {
-    fetch('http://localhost:5000/api/intervention', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(msg.data)
-    }).catch(() => {});
-  }
-});
+  window.addEventListener('mousemove', (e) => {
+    S.mouseEvents.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+    S.lastActivityTime = Date.now();
+  }, { passive: true });
 
-chrome.tabs.onActivated.addListener((info) => {
-  state.tabSwitches.push({ tabId: info.tabId, t: Date.now() });
-  state.tabHistory[info.tabId] = (state.tabHistory[info.tabId] || 0) + 1;
-});
+  window.addEventListener('click', () => { S.clicks++; S.lastActivityTime = Date.now(); });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
-  delete state.tabHistory[tabId];
-});
+  window.addEventListener('keydown', () => { S.keypresses++; S.lastActivityTime = Date.now(); }, { passive: true });
 
-function getStats() {
-  const now = Date.now(), recent = state.signals.filter(s => now - s.timestamp < 300000);
-  const tabSwitchesRecent = state.tabSwitches.filter(s => now - s.t < 300000).length;
-  const avgVel = recent.length ? recent.reduce((a, s) => a + s.avgScrollVelocity, 0) / recent.length : 0;
-  const avgConsistency = recent.length ? recent.reduce((a, s) => a + s.scrollConsistency, 0) / recent.length : 0;
-  const avgScrollDepth = recent.length ? recent.reduce((a, s) => a + s.scrollDepth, 0) / recent.length : 0;
-  return { tabSwitches: tabSwitchesRecent, avgVel: Math.round(avgVel * 100) / 100, avgConsistency: Math.round(avgConsistency * 1000) / 1000, avgScrollDepth: Math.round(avgScrollDepth * 1000) / 1000, sessionMinutes: Math.round((now - state.sessionStart) / 60000) };
-}
+  document.addEventListener('mouseover', (e) => {
+    if (e.target.tagName === 'A') S.hoverStart = Date.now();
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.tagName === 'A' && S.hoverStart && (Date.now() - S.hoverStart > 500)) S.hoversWithoutClick++;
+    S.hoverStart = null;
+  });
 
-function buildFeatureVector() {
-  const now = Date.now(), window5 = state.signals.filter(s => now - s.timestamp < 300000);
-  if (window5.length < 2) return null;
-  const tabSw = state.tabSwitches.filter(s => now - s.t < 300000).length;
-  const avgVel = window5.reduce((a, s) => a + s.avgScrollVelocity, 0) / window5.length;
-  const avgCons = window5.reduce((a, s) => a + s.scrollConsistency, 0) / window5.length;
-  const avgMouse = window5.reduce((a, s) => a + s.mouseActivity, 0) / window5.length;
-  const avgDepth = window5.reduce((a, s) => a + s.scrollDepth, 0) / window5.length;
-  const avgContent = window5.reduce((a, s) => a + s.contentLength, 0) / window5.length;
-  const recentSignal = window5[window5.length - 1];
-  const current_url = recentSignal ? recentSignal.url : '';
-  const page_title = recentSignal ? recentSignal.title : '';
-  const current_goal = state.currentGoal || '';
-  const sessionMin = (now - state.sessionStart) / 60000;
-  const hour = new Date().getHours() + new Date().getMinutes() / 60;
-  return {
-    avg_scroll_velocity: avgVel,
-    scroll_consistency: avgCons,
-    tab_switches_5min: tabSw,
-    mouse_activity: avgMouse,
-    session_duration: sessionMin,
-    time_of_day: hour,
-    content_length: avgContent,
-    scroll_depth_vs_time: window5.length > 0 ? avgDepth / (sessionMin || 1) : 0,
-    current_url,
-    page_title,
-    current_goal
-  };
-}
-
-async function tick() {
-  const fv = buildFeatureVector();
-  if (!fv) return;
-  try {
-    const res = await fetch('http://localhost:5000/api/predict', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fv)
-    });
-    const data = await res.json();
-    const prev = state.currentState;
-    state.currentState = data.state;
-    state.lastStates.push({ state: data.state, t: Date.now() });
-    if (state.lastStates.length > 100) state.lastStates = state.lastStates.slice(-100);
-
-    if (data.state !== prev) {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { type: 'STATE_CHANGE', state: data.state, stats: getStats() }).catch(() => {});
-      }
+  function computeAndSend() {
+    const now = Date.now(), scrolls = S.scrollEvents.filter(e => now - e.t < 5000), mice = S.mouseEvents.filter(e => now - e.t < 5000);
+    const avgVel = scrolls.length > 1 ? scrolls.reduce((a, e) => a + Math.abs(e.dy), 0) / scrolls.length : 0;
+    let consistency = 0;
+    if (scrolls.length > 2) {
+      const gaps = [];
+      for (let i = 1; i < scrolls.length; i++) gaps.push(scrolls[i].t - scrolls[i - 1].t);
+      const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      const variance = gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length;
+      consistency = 1 / (1 + Math.sqrt(variance) / 1000);
     }
+    const mouseActivity = mice.length > 1 ? mice.reduce((a, e, i) => i === 0 ? 0 : a + Math.hypot(mice[i].x - mice[i - 1].x, mice[i].y - mice[i - 1].y), 0) / mice.length : 0;
+    const docHeight = Math.max(document.body.scrollHeight, 1);
+    const scrollDepth = window.scrollY / docHeight;
+    const contentLength = document.body.innerText.length;
 
-    fetch('http://localhost:5000/api/signals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ features: fv, state: data.state, timestamp: Date.now() })
-    }).catch(() => {});
-  } catch(e) {}
+    chrome.runtime.sendMessage({
+      type: 'SIGNALS',
+      data: {
+        avgScrollVelocity: Math.round(avgVel * 100) / 100,
+        scrollConsistency: Math.round(consistency * 1000) / 1000,
+        directionChanges: S.dirChanges,
+        mouseActivity: Math.round(mouseActivity * 100) / 100,
+        clicks: S.clicks,
+        keypresses: S.keypresses,
+        hoversWithoutClick: S.hoversWithoutClick,
+        scrollDepth: Math.round(scrollDepth * 1000) / 1000,
+        contentLength,
+        url: location.hostname,
+        title: document.title,
+        timestamp: now
+      }
+    });
 
-  state.signals = state.signals.filter(s => Date.now() - s.timestamp < 600000);
-  state.tabSwitches = state.tabSwitches.filter(s => Date.now() - s.t < 600000);
-}
+    S.scrollEvents = scrolls;
+    S.mouseEvents = mice;
+    S.dirChanges = 0;
+    S.clicks = 0;
+    S.keypresses = 0;
+    S.hoversWithoutClick = 0;
+  }
 
-chrome.alarms.create('tick', { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === 'tick') tick(); });
+  setInterval(computeAndSend, 5000);
+})();

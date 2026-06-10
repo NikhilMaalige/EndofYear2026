@@ -22,3 +22,9 @@ input[type="text"]:focus { border-color: #4f46e5; }
 .feedback { font-size: 11px; color: #4ade80; margin-top: 4px; min-height: 16px; }
 .dashboard-link { display: block; text-align: center; color: #60a5fa; text-decoration: none; font-size: 12px; margin-top: 8px; }
 .dashboard-link:hover { text-decoration: underline; }
+.model-status { font-size: 11px; text-align: center; margin-top: 8px; padding: 4px 8px; border-radius: 4px; background: #1a1a24; min-height: 20px; }
+.snooze-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.btn.snooze { background: #312e81; color: #c4b5fd; flex-shrink: 0; padding: 6px 10px; }
+.btn.snooze:hover { background: #3730a3; }
+.btn.snooze:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.snooze-label { font-size: 11px; color: #a78bfa; }

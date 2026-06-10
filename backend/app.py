@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import storage, classifier, feature_pipeline
@@ -10,8 +11,8 @@ storage.init_db()
 @app.route('/api/predict', methods=['POST'])
 def predict():
     features = request.json
-    state = classifier.predict(features)
-    return jsonify({'state': state})
+    state, confidence = classifier.predict(features)
+    return jsonify({'state': state, 'confidence': round(confidence, 3)})
 
 @app.route('/api/signals', methods=['POST'])
 def receive_signals():
@@ -52,6 +53,25 @@ def retrain():
     result = classifier.train_from_db()
     return jsonify(result)
 
+@app.route('/api/status', methods=['GET'])
+def status():
+    """Returns label counts and whether a trained model exists."""
+    import os
+    label_counts = storage.get_label_counts()
+    model_exists = os.path.exists(os.path.join(os.path.dirname(__file__), 'model.pkl'))
+    return jsonify({
+        'label_counts': label_counts,
+        'model_trained': model_exists,
+        'ready_to_train': label_counts['total'] >= 10
+    })
+
+@app.route('/api/cleanup', methods=['POST'])
+def cleanup():
+    """Prune data older than N days (default 30). Pass {\"days\": N} in body."""
+    days = (request.json or {}).get('days', 30)
+    result = storage.cleanup_old_data(days=days)
+    return jsonify(result)
+
 @app.route('/api/dashboard', methods=['GET'])
 def dashboard_data():
     import time, json
@@ -90,4 +110,5 @@ def dashboard_data():
     return jsonify({'timeline': timeline, 'siteStates': site_states, 'interventions': interventions, 'weeklyTrends': daily})
 
 if __name__ == '__main__':
+    storage.cleanup_old_data(days=30)  # prune data older than 30 days on each startup
     app.run(port=5000, debug=True)

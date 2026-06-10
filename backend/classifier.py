@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 import os, json, joblib
+# pyrefly: ignore [missing-import]
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 import feature_pipeline as fp
@@ -54,9 +56,9 @@ def _rule_based(features):
         if goal and relevance > 0.5:
             score -= 2
 
-    if score >= 5: return 'gone'
-    if score >= 2: return 'drifting'
-    return 'focused'
+    if score >= 5: return 'gone', 0.6
+    if score >= 2: return 'drifting', 0.6
+    return 'focused', 0.6
 
 def predict(features):
     global _model, _stats
@@ -67,8 +69,10 @@ def predict(features):
     try:
         fv = fp.extract(features)
         fv = fp.normalize(fv, _stats)
-        pred = _model.predict(fv.reshape(1, -1))[0]
-        return STATE_MAP.get(pred, 'focused')
+        proba = _model.predict_proba(fv.reshape(1, -1))[0]
+        pred_idx = int(np.argmax(proba))
+        confidence = float(proba[pred_idx])
+        return STATE_MAP.get(pred_idx, 'focused'), confidence
     except:
         return _rule_based(features)
 

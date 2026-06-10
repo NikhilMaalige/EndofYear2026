@@ -1,16 +1,22 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <title>Attention Guard — Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
 </head>
+
 <body>
   <div class="dashboard">
     <header>
       <h1>🛡️ Attention Guard</h1>
       <p class="subtitle">Your attention, visualized</p>
+      <div class="header-controls">
+        <span id="last-updated" class="last-updated"></span>
+        <button id="refresh-btn" class="refresh-btn">↻ Refresh</button>
+      </div>
     </header>
     <div class="grid">
       <section class="card full-width">
@@ -42,4 +48,5 @@
   </div>
   <script src="dashboard.js"></script>
 </body>
+
 </html>

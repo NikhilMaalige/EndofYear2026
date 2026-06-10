@@ -56,3 +56,37 @@ chrome.runtime.onMessage.addListener((msg) => {
     }
   }
 });
+// Snooze button
+document.getElementById('snooze-btn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'SET_SNOOZE', minutes: 30 });
+  document.getElementById('snooze-label').textContent = 'Snoozed for 30m';
+  document.getElementById('snooze-btn').disabled = true;
+  setTimeout(() => {
+    document.getElementById('snooze-label').textContent = '';
+    document.getElementById('snooze-btn').disabled = false;
+  }, 30 * 60 * 1000);
+});
+
+// Check if already snoozed on open
+chrome.runtime.sendMessage({ type: 'GET_SNOOZE' });
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'SNOOZE_STATUS' && msg.snoozed) {
+    document.getElementById('snooze-label').textContent = `Snoozed (${msg.remainingMinutes}m left)`;
+    document.getElementById('snooze-btn').disabled = true;
+  }
+});
+
+// Fetch model/label status from backend
+fetch('http://localhost:5000/api/status')
+  .then(r => r.json())
+  .then(data => {
+    const el = document.getElementById('model-status');
+    const lc = data.label_counts;
+    const trained = data.model_trained ? '✅ Model trained' : (data.ready_to_train ? '⚡ Ready to train' : `📊 ${lc.total}/10 labels`);
+    el.innerHTML = `<span title="Focused: ${lc.focused} | Drifting: ${lc.drifting} | Gone: ${lc.gone}">${trained}</span>`;
+    el.style.color = data.model_trained ? '#4ade80' : (data.ready_to_train ? '#fbbf24' : '#888');
+  })
+  .catch(() => {
+    document.getElementById('model-status').textContent = '⚠️ Backend offline';
+    document.getElementById('model-status').style.color = '#f87171';
+  });

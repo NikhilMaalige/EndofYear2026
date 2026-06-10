@@ -74,3 +74,25 @@ def get_training_data():
     db = get_db()
     labels = db.execute('SELECT * FROM labels WHERE features IS NOT NULL ORDER BY timestamp').fetchall()
     return [dict(r) for r in labels]
+
+def get_label_counts():
+    """Return per-class label counts and total, used by the popup status endpoint."""
+    db = get_db()
+    rows = db.execute('SELECT label, COUNT(*) as cnt FROM labels GROUP BY label').fetchall()
+    counts = {'focused': 0, 'drifting': 0, 'gone': 0}
+    for r in rows:
+        if r['label'] in counts:
+            counts[r['label']] = r['cnt']
+    counts['total'] = sum(counts.values())
+    return counts
+
+def cleanup_old_data(days=30):
+    """Delete signals, labels, and interventions older than `days` days."""
+    import time
+    cutoff = (time.time() - days * 86400) * 1000  # stored as JS timestamp (ms)
+    db = get_db()
+    db.execute('DELETE FROM signals WHERE timestamp < ?', (cutoff,))
+    db.execute('DELETE FROM labels WHERE timestamp < ?', (cutoff,))
+    db.execute('DELETE FROM interventions WHERE timestamp < ?', (cutoff,))
+    db.commit()
+    return {'deleted_before_ms': cutoff, 'cutoff_days': days}

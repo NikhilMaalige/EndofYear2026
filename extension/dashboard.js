@@ -1,6 +1,12 @@
 const API = 'http://localhost:5000';
 
+let isLoading = false;
+
 async function load() {
+  if (isLoading) return;
+  isLoading = true;
+  const btn = document.getElementById('refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Loading…'; }
   try {
     const res = await fetch(`${API}/api/dashboard`);
     const data = await res.json();
@@ -9,8 +15,13 @@ async function load() {
     renderSites(data.siteStates);
     renderInterventions(data.interventions);
     renderTrend(data.weeklyTrends);
-  } catch(e) {
+    const ts = document.getElementById('last-updated');
+    if (ts) ts.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
     document.querySelector('.dashboard').innerHTML += '<p style="color:#f87171;text-align:center;margin-top:20px;">⚠️ Cannot connect to backend. Make sure Flask is running on localhost:5000</p>';
+  } finally {
+    isLoading = false;
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
   }
 }
 
@@ -53,9 +64,9 @@ function renderSites(siteStates) {
     return `<div class="site-row">
       <div class="site-name">${site}</div>
       <div class="site-bar">
-        <div class="seg focused" style="width:${s.focused/total*100}%"></div>
-        <div class="seg drifting" style="width:${s.drifting/total*100}%"></div>
-        <div class="seg gone" style="width:${s.gone/total*100}%"></div>
+        <div class="seg focused" style="width:${s.focused / total * 100}%"></div>
+        <div class="seg drifting" style="width:${s.drifting / total * 100}%"></div>
+        <div class="seg gone" style="width:${s.gone / total * 100}%"></div>
       </div>
     </div>`;
   }).join('');
@@ -83,7 +94,7 @@ function renderTrend(weeklyTrends) {
   const w = canvas.offsetWidth, h = 200;
 
   const days = Object.keys(weeklyTrends).sort().slice(-7);
-  if (!days.length) { ctx.fillStyle = '#666'; ctx.font = '13px Inter'; ctx.fillText('No weekly data yet', w/2 - 60, h/2); return; }
+  if (!days.length) { ctx.fillStyle = '#666'; ctx.font = '13px Inter'; ctx.fillText('No weekly data yet', w / 2 - 60, h / 2); return; }
 
   const maxVal = Math.max(...days.map(d => weeklyTrends[d].total), 1);
   const barW = Math.min(40, (w - 60) / days.length - 8);
@@ -110,3 +121,4 @@ function renderTrend(weeklyTrends) {
 
 load();
 setInterval(load, 60000);
+document.getElementById('refresh-btn').addEventListener('click', load);
