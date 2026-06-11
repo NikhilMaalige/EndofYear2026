@@ -97,6 +97,7 @@
         clicks: S.clicks,
         keypresses: S.keypresses,
         hoversWithoutClick: S.hoversWithoutClick,
+        idleSeconds: Math.round((now - S.lastActivityTime) / 1000),
         scrollDepth: Math.round(scrollDepth * 1000) / 1000,
         contentLength,
         url: location.hostname,
@@ -113,5 +114,5 @@
     S.hoversWithoutClick = 0;
   }
 
-  setInterval(computeAndSend, 5000);
+  setInterval(computeAndSend, 2000);
 })();

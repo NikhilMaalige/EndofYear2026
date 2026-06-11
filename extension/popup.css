@@ -93,6 +93,69 @@ h1 {
 .status-badge.drifting { background: var(--drifting-bg); color: var(--drifting); border-color: transparent; }
 .status-badge.gone { background: var(--gone-bg); color: var(--gone); border-color: transparent; }
 
+.drift-section {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.drift-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.drift-value {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.drift-source {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.drift-source.local {
+  color: var(--text-muted);
+}
+
+.drift-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.drift-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.4s var(--ease), background 0.3s;
+}
+
+.drift-fill.focused { background: var(--focused); }
+.drift-fill.drifting { background: var(--drifting); }
+.drift-fill.gone { background: var(--gone); }
+
+.drift-reason {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  display: none;
+}
+
+.stat-wide { grid-column: span 2; }
+.stat-sm { font-size: 10px !important; }
+
 .stats {
   font-size: 11px;
   color: var(--text-muted);

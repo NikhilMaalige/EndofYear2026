@@ -300,6 +300,28 @@
 
 .ag-stat-row:last-child { border-bottom: none; }
 
+.ag-stat-row.ag-stat-highlight span:last-child {
+  color: var(--ag-gone);
+  font-size: 15px;
+}
+
+.ag-stat-row.ag-stat-sub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.ag-stat-row small {
+  font-weight: 400;
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.ag-stat-divider {
+  height: 1px;
+  background: var(--ag-border);
+  margin: 8px 0;
+}
+
 #ag-recall-section {
   margin-bottom: 16px;
   display: none;

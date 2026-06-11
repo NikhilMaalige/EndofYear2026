@@ -150,11 +150,26 @@
           reasonDiv.style.display = 'none';
         }
 
+        const driftPct = typeof msg.driftScore === 'number'
+          ? Math.round((msg.driftScore <= 1 ? msg.driftScore * 100 : msg.driftScore))
+          : (s.driftScore ?? 0);
+        const driftLabel = msg.driftSource === 'gemini' ? ' (AI calibrated)'
+          : msg.driftSource === 'hybrid' ? ' (AI adjusted)' : '';
+        const comps = msg.components || {};
+        const compRows = Object.entries(comps)
+          .filter(([, v]) => v > 0.08)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([k, v]) => `<div class="ag-stat-row ag-stat-sub"><span>${k.replace(/_/g, ' ')}</span><span>${Math.round(v * 100)}%</span></div>`)
+          .join('');
+
         document.getElementById('ag-mirror-stats').innerHTML =
-          `<div class="ag-stat-row"><span>Tab switches (5m)</span><span>${s.tabSwitches}</span></div>` +
+          `<div class="ag-stat-row ag-stat-highlight"><span>Drift score${driftLabel}</span><span>${driftPct}%</span></div>` +
+          `<div class="ag-stat-row"><span>Tab switches/min</span><span>${s.tabSwitchesPerMin ?? '—'} <small>(20+ drifting)</small></span></div>` +
+          `<div class="ag-stat-row"><span>Idle time</span><span>${s.idleSeconds ?? 0}s</span></div>` +
           `<div class="ag-stat-row"><span>Scroll velocity</span><span>${s.avgVel}</span></div>` +
-          `<div class="ag-stat-row"><span>Scroll depth</span><span>${Math.round(s.avgScrollDepth * 100)}%</span></div>` +
-          `<div class="ag-stat-row"><span>Session</span><span>${s.sessionMinutes} min</span></div>`;
+          `<div class="ag-stat-row"><span>Session</span><span>${s.sessionMinutes} min</span></div>` +
+          (compRows ? `<div class="ag-stat-divider"></div>${compRows}` : '');
         chrome.runtime.onMessage.removeListener(handler);
       }
     });

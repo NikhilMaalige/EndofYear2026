@@ -54,19 +54,69 @@ chrome.storage.local.get(['currentGoal'], (r) => {
   updateGoalDisplay(r.currentGoal);
 });
 
+function updateDriftSource(driftSource) {
+  const el = document.getElementById('drift-source');
+  if (!el) return;
+  const labels = {
+    gemini: '· AI calibrated',
+    hybrid: '· AI adjusted',
+    local: '· local estimate',
+  };
+  const label = labels[driftSource] || labels.local;
+  el.textContent = label;
+  el.className = `drift-source ${driftSource === 'local' ? 'local' : ''}`;
+}
+
+function updateDriftUI(driftScore, reason, state, driftSource) {
+  const displayPct = typeof driftScore === 'number' && driftScore <= 1
+    ? Math.round(driftScore * 100)
+    : (driftScore ?? 0);
+
+  document.getElementById('drift-value').textContent = `${displayPct}%`;
+  const fill = document.getElementById('drift-fill');
+  fill.style.width = `${Math.min(displayPct, 100)}%`;
+  fill.className = 'drift-fill';
+  if (state === 'gone' || displayPct > 64) fill.classList.add('gone');
+  else if (state === 'drifting' || displayPct > 34) fill.classList.add('drifting');
+  else fill.classList.add('focused');
+
+  updateDriftSource(driftSource || 'local');
+
+  const reasonEl = document.getElementById('drift-reason');
+  if (reason && state !== 'focused') {
+    reasonEl.textContent = reason;
+    reasonEl.style.display = 'block';
+  } else {
+    reasonEl.textContent = '';
+    reasonEl.style.display = 'none';
+  }
+}
+
+function renderStateUpdate(msg) {
+  const labels = { focused: 'Focused', drifting: 'Drifting', gone: 'Off track' };
+  document.getElementById('status').textContent = labels[msg.state] || msg.state;
+  document.getElementById('status').className = `status-badge ${msg.state}`;
+
+  const driftRaw = msg.driftScore ?? msg.stats?.driftScore ?? 0;
+  const driftNorm = driftRaw > 1 ? driftRaw / 100 : driftRaw;
+  updateDriftUI(driftNorm, msg.reason, msg.state, msg.driftSource);
+
+  if (msg.stats) {
+    const s = msg.stats;
+    const top = s.topComponent ? `<div class="stat-item stat-wide"><div class="val stat-sm">${s.topComponent}</div><div class="lbl">Top signal</div></div>` : '';
+    document.getElementById('stats').innerHTML = `
+      <div class="stat-item"><div class="val">${s.tabSwitchesPerMin ?? '—'}</div><div class="lbl">Tabs/min</div></div>
+      <div class="stat-item"><div class="val">${s.idleSeconds ?? 0}s</div><div class="lbl">Idle</div></div>
+      <div class="stat-item"><div class="val">${s.avgVel}</div><div class="lbl">Scroll</div></div>
+      <div class="stat-item"><div class="val">${s.sessionMinutes}m</div><div class="lbl">Session</div></div>
+      ${top}`;
+  }
+}
+
 chrome.runtime.sendMessage({ type: 'GET_STATE' });
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'STATE_UPDATE') {
-    const labels = { focused: 'Focused', drifting: 'Drifting', gone: 'Off track' };
-    document.getElementById('status').textContent = labels[msg.state] || msg.state;
-    document.getElementById('status').className = `status-badge ${msg.state}`;
-
-    if (msg.stats) {
-      document.getElementById('stats').innerHTML = `
-        <div class="stat-item"><div class="val">${msg.stats.tabSwitches}</div><div class="lbl">Tabs</div></div>
-        <div class="stat-item"><div class="val">${msg.stats.avgVel}</div><div class="lbl">Scroll</div></div>
-        <div class="stat-item"><div class="val">${msg.stats.sessionMinutes}m</div><div class="lbl">Session</div></div>`;
-    }
+  if (msg.type === 'STATE_UPDATE' || msg.type === 'DRIFT_UPDATE') {
+    renderStateUpdate(msg);
   }
 });
 

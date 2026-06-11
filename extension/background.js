@@ -1,4 +1,4 @@
-const DISTRACTING = ['youtube', 'netflix', 'twitter', 'instagram', 'facebook', 'reddit', 'tiktok', 'twitch'];
+importScripts('attention_engine.js');
 
 const state = {
   signals: [],
@@ -7,13 +7,22 @@ const state = {
   currentState: 'focused',
   currentReason: '',
   currentSuggestion: '',
+  currentDriftScore: 0,
+  currentDriftSource: 'local',
+  currentComponents: {},
+  currentTopComponent: null,
   lastStates: [],
   recentSites: [],
   snoozeUntil: 0,
   catchShownAt: 0,
   consecutiveDriftSignals: 0,
   lastGoal: '',
+  engineReady: false,
 };
+
+attentionEngine.loadConfig().then(() => {
+  state.engineReady = true;
+});
 
 chrome.storage.local.get(['snoozeUntil', 'currentGoal'], (r) => {
   if (r.snoozeUntil) state.snoozeUntil = r.snoozeUntil;
@@ -24,45 +33,62 @@ function isSnoozed() {
   return Date.now() < state.snoozeUntil;
 }
 
-function goalRelevance(title, goal) {
-  if (!title || !goal) return 0;
-  const stop = new Set(['for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is', 'my', 'how', 'what', 'why', 'with']);
-  const tw = new Set(title.toLowerCase().split(/\W+/).filter(w => w && !stop.has(w)));
-  const gw = goal.toLowerCase().split(/\W+/).filter(w => w && !stop.has(w));
-  if (!gw.length) return 0;
-  const overlap = gw.filter(w => tw.has(w)).length;
-  return overlap / gw.length;
+function signalsInWindow(ms) {
+  const now = Date.now();
+  return state.signals.filter(s => now - s.timestamp < ms);
 }
 
-function localHeuristic(latest, tabSw, goal) {
-  const v = latest.avgScrollVelocity || 0;
-  const c = latest.scrollConsistency || 0;
-  const m = latest.mouseActivity || 0;
-  const url = latest.url || '';
-  const title = latest.title || '';
-  const sessionMin = (Date.now() - state.sessionStart) / 60000;
-  const distracting = DISTRACTING.some(d => url.includes(d));
-  const relevance = goalRelevance(title, goal);
+function sumField(signals, field) {
+  return signals.reduce((a, s) => a + (s[field] || 0), 0);
+}
 
-  let score = 0;
-  if (v > 15) score += 2;
-  else if (v > 8) score += 1;
-  if (c > 0.7) score += 2;
-  if (tabSw > 8) score += 2;
-  else if (tabSw > 4) score += 1;
-  if (m < 2 && v > 5) score += 1;
-  if (sessionMin > 30) score += 1;
-  if (distracting) {
-    if (goal && relevance < 0.3) score += 4;
-    else if (!goal) score += 2;
-  } else if (goal && relevance > 0.5) {
-    score -= 2;
-  }
+function aggregateRates() {
+  const now = Date.now();
+  const window1 = signalsInWindow(60000);
+  const window5 = signalsInWindow(300000);
+  const tabSw1 = state.tabSwitches.filter(s => now - s.t < 60000).length;
+  const tabSw5 = state.tabSwitches.filter(s => now - s.t < 300000).length;
 
-  let driftState = 'focused';
-  if (score >= 5) driftState = 'gone';
-  else if (score >= 2) driftState = 'drifting';
-  return { score, driftState, distracting, relevance };
+  const clicks1 = sumField(window1, 'clicks');
+  const keys1 = sumField(window1, 'keypresses');
+  const dir1 = sumField(window1, 'directionChanges');
+  const hovers1 = sumField(window1, 'hoversWithoutClick');
+  const idleSeconds = window1.length
+    ? Math.max(...window1.map(s => s.idleSeconds || 0))
+    : 0;
+
+  const avgVel = window5.length
+    ? window5.reduce((a, s) => a + s.avgScrollVelocity, 0) / window5.length
+    : 0;
+  const avgCons = window5.length
+    ? window5.reduce((a, s) => a + s.scrollConsistency, 0) / window5.length
+    : 0;
+  const avgMouse = window5.length
+    ? window5.reduce((a, s) => a + s.mouseActivity, 0) / window5.length
+    : 0;
+  const avgDepth = window5.length
+    ? window5.reduce((a, s) => a + s.scrollDepth, 0) / window5.length
+    : 0;
+  const avgContent = window5.length
+    ? window5.reduce((a, s) => a + (s.contentLength || 0), 0) / window5.length
+    : 0;
+
+  return {
+    tab_switches_per_min: tabSw1,
+    tab_switches_5min: tabSw5,
+    direction_changes_per_min: dir1,
+    clicks_per_min: clicks1,
+    keypresses_per_min: keys1,
+    interaction_per_min: clicks1 + keys1,
+    hovers_per_min: hovers1,
+    idle_seconds: idleSeconds,
+    avg_scroll_velocity: avgVel,
+    scroll_consistency: avgCons,
+    mouse_activity: avgMouse,
+    avgScrollDepth: avgDepth,
+    content_length: avgContent,
+    window5,
+  };
 }
 
 async function notifyTab(message) {
@@ -130,7 +156,32 @@ async function handleStateTransition(prev, next, reason, suggestion) {
     stats: getStats(),
     reason,
     suggestion,
+    driftScore: state.currentDriftScore,
+    driftSource: state.currentDriftSource,
+    components: state.currentComponents,
   });
+}
+
+function applyDriftResult(result, reason, suggestion, driftSource) {
+  state.currentDriftScore = result.drift_score;
+  state.currentComponents = result.components || {};
+  state.currentTopComponent = result.top_component;
+  if (driftSource) state.currentDriftSource = driftSource;
+  if (reason) state.currentReason = reason;
+  else if (result.reason) state.currentReason = result.reason;
+  if (suggestion !== undefined) state.currentSuggestion = suggestion;
+}
+
+function broadcastDriftUpdate() {
+  chrome.runtime.sendMessage({
+    type: 'DRIFT_UPDATE',
+    driftScore: state.currentDriftScore,
+    driftSource: state.currentDriftSource,
+    state: state.currentState,
+    reason: state.currentReason,
+    stats: getStats(),
+    components: state.currentComponents,
+  }).catch(() => {});
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -141,15 +192,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (state.recentSites.length > 5) state.recentSites.shift();
     }
 
-    if (!isSnoozed()) {
+    if (!isSnoozed() && state.engineReady) {
       chrome.storage.local.get(['currentGoal'], async (r) => {
         const goal = r.currentGoal || '';
         state.lastGoal = goal;
-        const tabSw = state.tabSwitches.filter(s => Date.now() - s.t < 300000).length;
-        const h = localHeuristic(msg.data, tabSw, goal);
+        const fv = await buildFeatureVectorFromLatest(msg.data, goal);
+        if (!fv) return;
+
+        const config = await attentionEngine.loadConfig();
+        const h = attentionEngine.computeDriftSync(fv, config);
+        applyDriftResult(h);
 
         if (h.driftState !== 'focused') {
           state.consecutiveDriftSignals++;
+          if (state.consecutiveDriftSignals === 1 || state.consecutiveDriftSignals === 6) {
+            tick();
+          }
         } else {
           state.consecutiveDriftSignals = 0;
         }
@@ -157,11 +215,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (
           state.currentState === 'focused' &&
           state.consecutiveDriftSignals >= 2 &&
+          h.drift_score >= 0.34 &&
           h.driftState !== 'focused'
         ) {
           const sub = h.distracting && goal
             ? `${msg.data.url} doesn't match "${goal.slice(0, 40)}"`
-            : '';
+            : h.reason || '';
           await triggerOffTrackCatch(
             h.driftState === 'gone' ? "You're off track." : 'Starting to drift.',
             sub,
@@ -187,6 +246,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       stats: getStats(),
       reason: state.currentReason,
       suggestion: state.currentSuggestion,
+      driftScore: state.currentDriftScore,
+      driftSource: state.currentDriftSource,
+      components: state.currentComponents,
+      top_component: state.currentTopComponent,
     });
   }
 
@@ -223,6 +286,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       state.currentReason = 'Self-corrected';
       state.currentSuggestion = '';
       state.consecutiveDriftSignals = 0;
+      state.currentDriftScore = 0;
 
       logIntervention({
         type: 'self-correction',
@@ -241,6 +305,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (state.currentState !== 'focused') {
       state.currentState = 'focused';
       state.consecutiveDriftSignals = 0;
+      state.currentDriftScore = 0;
       logIntervention({
         type: 'realization',
         action: msg.reason || 'tab_return',
@@ -259,88 +324,129 @@ chrome.tabs.onActivated.addListener((info) => {
 });
 
 function getStats() {
-  const now = Date.now();
-  const recent = state.signals.filter(s => now - s.timestamp < 300000);
-  const tabSwitchesRecent = state.tabSwitches.filter(s => now - s.t < 300000).length;
-  const avgVel = recent.length ? recent.reduce((a, s) => a + s.avgScrollVelocity, 0) / recent.length : 0;
-  const avgConsistency = recent.length ? recent.reduce((a, s) => a + s.scrollConsistency, 0) / recent.length : 0;
-  const avgScrollDepth = recent.length ? recent.reduce((a, s) => a + s.scrollDepth, 0) / recent.length : 0;
+  const rates = aggregateRates();
+  let topLabel = state.currentTopComponent;
+  if (topLabel && attentionEngine.SIGNAL_LABELS) {
+    topLabel = attentionEngine.SIGNAL_LABELS[topLabel] || topLabel;
+  }
+
   return {
-    tabSwitches: tabSwitchesRecent,
-    avgVel: Math.round(avgVel * 100) / 100,
-    avgConsistency: Math.round(avgConsistency * 1000) / 1000,
-    avgScrollDepth: Math.round(avgScrollDepth * 1000) / 1000,
-    sessionMinutes: Math.round((now - state.sessionStart) / 60000),
+    tabSwitches: rates.tab_switches_5min,
+    tabSwitchesPerMin: rates.tab_switches_per_min,
+    avgVel: Math.round(rates.avg_scroll_velocity * 100) / 100,
+    avgConsistency: Math.round(rates.scroll_consistency * 1000) / 1000,
+    avgScrollDepth: Math.round(rates.avgScrollDepth * 1000) / 1000,
+    idleSeconds: Math.round(rates.idle_seconds),
+    sessionMinutes: Math.round((Date.now() - state.sessionStart) / 60000),
+    driftScore: Math.round(state.currentDriftScore * 100),
+    topComponent: topLabel,
+    interactionPerMin: rates.interaction_per_min,
+  };
+}
+
+async function buildFeatureVectorFromLatest(latest, goal) {
+  const rates = aggregateRates();
+  if (!latest && rates.window5.length < 1) return null;
+  const last = latest || rates.window5[rates.window5.length - 1];
+  const sessionMin = (Date.now() - state.sessionStart) / 60000;
+  const hour = new Date().getHours();
+
+  return {
+    current_url: last.url,
+    page_title: last.title,
+    current_goal: goal || '',
+    recent_sites: state.recentSites,
+    avg_scroll_velocity: rates.avg_scroll_velocity,
+    scroll_consistency: rates.scroll_consistency,
+    tab_switches_per_min: rates.tab_switches_per_min,
+    tab_switches_5min: rates.tab_switches_5min,
+    direction_changes_per_min: rates.direction_changes_per_min,
+    clicks_per_min: rates.clicks_per_min,
+    keypresses_per_min: rates.keypresses_per_min,
+    interaction_per_min: rates.interaction_per_min,
+    hovers_per_min: rates.hovers_per_min,
+    idle_seconds: rates.idle_seconds,
+    mouse_activity: rates.mouse_activity,
+    session_duration: sessionMin,
+    time_of_day: hour,
+    content_length: rates.content_length,
+    scroll_depth_vs_time: rates.window5.length > 0 ? rates.avgScrollDepth / (sessionMin || 1) : 0,
+    consecutive_drift: state.consecutiveDriftSignals,
   };
 }
 
 async function buildFeatureVector() {
-  const now = Date.now();
-  const window5 = state.signals.filter(s => now - s.timestamp < 300000);
-  if (window5.length < 1) return null;
-  const latest = window5[window5.length - 1];
-  const tabSw = state.tabSwitches.filter(s => now - s.t < 300000).length;
-  const avgVel = window5.reduce((a, s) => a + s.avgScrollVelocity, 0) / window5.length;
-  const avgCons = window5.reduce((a, s) => a + s.scrollConsistency, 0) / window5.length;
-  const avgMouse = window5.reduce((a, s) => a + s.mouseActivity, 0) / window5.length;
-  const avgDepth = window5.reduce((a, s) => a + s.scrollDepth, 0) / window5.length;
-  const avgContent = window5.reduce((a, s) => a + (s.contentLength || 0), 0) / window5.length;
-  const sessionMin = (now - state.sessionStart) / 60000;
-  const hour = new Date().getHours();
-
   const r = await chrome.storage.local.get(['currentGoal']);
-  return {
-    current_url: latest.url,
-    page_title: latest.title,
-    current_goal: r.currentGoal || '',
-    recent_sites: state.recentSites,
-    avg_scroll_velocity: avgVel,
-    scroll_consistency: avgCons,
-    tab_switches_5min: tabSw,
-    mouse_activity: avgMouse,
-    session_duration: sessionMin,
-    time_of_day: hour,
-    content_length: avgContent,
-    scroll_depth_vs_time: window5.length > 0 ? avgDepth / (sessionMin || 1) : 0,
-  };
+  return buildFeatureVectorFromLatest(null, r.currentGoal || '');
+}
+
+async function applyLocalState(result, reason, suggestion) {
+  const prev = state.currentState;
+  applyDriftResult(result, reason, suggestion);
+  state.currentState = result.state || result.driftState;
+
+  state.lastStates.push({ state: state.currentState, t: Date.now() });
+  if (state.lastStates.length > 100) state.lastStates = state.lastStates.slice(-100);
+
+  if (state.currentState !== prev) {
+    await handleStateTransition(prev, state.currentState, state.currentReason, state.currentSuggestion);
+  }
 }
 
 async function tick() {
   if (isSnoozed()) return;
   const fv = await buildFeatureVector();
   if (!fv) return;
+
+  let data = null;
   try {
     const res = await fetch('http://localhost:5000/api/predict', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fv),
     });
-    const data = await res.json();
-    const prev = state.currentState;
-    state.currentState = data.state;
-    state.currentReason = data.reason || '';
-    state.currentSuggestion = data.suggestion || '';
-
-    state.lastStates.push({ state: data.state, t: Date.now() });
-    if (state.lastStates.length > 100) state.lastStates = state.lastStates.slice(-100);
-
-    if (data.state !== prev) {
-      await handleStateTransition(prev, data.state, data.reason, data.suggestion);
+    data = await res.json();
+  } catch (e) {
+    if (state.engineReady) {
+      const config = await attentionEngine.loadConfig();
+      const local = attentionEngine.computeDriftSync(fv, config);
+      await applyLocalState(local);
     }
+    state.signals = state.signals.filter(s => Date.now() - s.timestamp < 600000);
+    state.tabSwitches = state.tabSwitches.filter(s => Date.now() - s.t < 600000);
+    return;
+  }
 
-    fetch('http://localhost:5000/api/signals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        features: fv,
-        state: data.state,
-        reason: data.reason,
-        suggestion: data.suggestion,
-        source: data.source,
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch (e) { /* backend offline */ }
+  const prev = state.currentState;
+  state.currentState = data.state;
+  state.currentReason = data.reason || '';
+  state.currentSuggestion = data.suggestion || '';
+  state.currentDriftScore = data.drift_score ?? state.currentDriftScore;
+  state.currentDriftSource = data.drift_source || 'local';
+  state.currentComponents = data.components || state.currentComponents;
+  state.currentTopComponent = data.top_component ?? state.currentTopComponent;
+
+  state.lastStates.push({ state: data.state, t: Date.now() });
+  if (state.lastStates.length > 100) state.lastStates = state.lastStates.slice(-100);
+
+  if (data.state !== prev) {
+    await handleStateTransition(prev, data.state, data.reason, data.suggestion);
+  }
+
+  broadcastDriftUpdate();
+
+  fetch('http://localhost:5000/api/signals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      features: { ...fv, drift_score: state.currentDriftScore, components: state.currentComponents },
+      state: data.state,
+      reason: data.reason,
+      suggestion: data.suggestion,
+      source: data.source,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
 
   state.signals = state.signals.filter(s => Date.now() - s.timestamp < 600000);
   state.tabSwitches = state.tabSwitches.filter(s => Date.now() - s.t < 600000);

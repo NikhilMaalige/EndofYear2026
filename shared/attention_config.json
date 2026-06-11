@@ -1,0 +1,33 @@
+{
+  "weights": {
+    "tab_switch_rate": 0.22,
+    "scroll_velocity": 0.14,
+    "scroll_consistency": 0.12,
+    "idle_time": 0.12,
+    "passive_browse": 0.10,
+    "direction_chaos": 0.08,
+    "low_interaction": 0.06,
+    "distracting_context": 0.10,
+    "goal_mismatch": 0.06
+  },
+  "signals": {
+    "tab_switches_per_min": { "focused_max": 8, "drifting_at": 20, "gone_at": 40 },
+    "scroll_velocity": { "focused_max": 5, "drifting_at": 10, "gone_at": 18 },
+    "scroll_consistency": { "focused_max": 0.35, "drifting_at": 0.6, "gone_at": 0.8 },
+    "idle_seconds": { "focused_max": 20, "drifting_at": 60, "gone_at": 180 },
+    "direction_changes_per_min": { "focused_max": 3, "drifting_at": 10, "gone_at": 20 },
+    "interaction_per_min": { "focused_min": 2, "drifting_below": 1, "gone_below": 0.3 }
+  },
+  "modifiers": {
+    "goal_alignment_bonus": -0.15,
+    "goal_alignment_threshold": 0.5,
+    "distracting_mismatch_penalty": 0.20,
+    "distracting_mismatch_threshold": 0.3,
+    "sustained_drift_penalty": 0.12,
+    "sustained_drift_threshold": 6,
+    "session_fatigue_penalty": 0.05,
+    "session_fatigue_minutes": 45
+  },
+  "states": { "focused_max": 0.34, "drifting_max": 0.64 },
+  "distracting_domains": ["youtube", "netflix", "twitter", "instagram", "facebook", "reddit", "tiktok", "twitch"]
+}

@@ -1,26 +1,35 @@
 import numpy as np
 import re
+import attention_engine as ae
 
-FEATURE_KEYS = ['avg_scroll_velocity', 'scroll_consistency', 'tab_switches_5min', 'mouse_activity', 'session_duration', 'time_of_day', 'content_length', 'scroll_depth_vs_time', 'goal_relevance', 'is_distracting']
-DISTRACTING_DOMAINS = ['youtube.com', 'netflix.com', 'twitter.com', 'instagram.com', 'facebook.com', 'reddit.com', 'tiktok.com']
+FEATURE_KEYS = [
+    'avg_scroll_velocity', 'scroll_consistency', 'tab_switches_5min',
+    'mouse_activity', 'session_duration', 'time_of_day',
+    'content_length', 'scroll_depth_vs_time', 'goal_relevance', 'is_distracting',
+    'tab_switches_per_min', 'idle_seconds', 'direction_changes_per_min',
+    'interaction_per_min', 'hovers_per_min', 'passive_browse_score', 'drift_score',
+]
+
+DISTRACTING_DOMAINS = ae.load_config()['distracting_domains']
+
 
 def _get_relevance_score(title, goal):
-    if not title or not goal: return 0.0
-    t_words = set(re.findall(r'\w+', str(title).lower()))
-    g_words = set(re.findall(r'\w+', str(goal).lower()))
-    stop_words = {'for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is', 'my', 'how', 'what', 'why', 'with'}
-    t_words -= stop_words
-    g_words -= stop_words
-    if not g_words: return 0.0
-    return float(len(t_words.intersection(g_words))) / len(g_words)
+    return ae._get_relevance_score(title, goal)
+
 
 def extract(raw):
+    normalized = ae.normalize_features(raw)
     url = str(raw.get('current_url', ''))
     title = str(raw.get('page_title', ''))
     goal = str(raw.get('current_goal', ''))
-    raw['is_distracting'] = 1.0 if any(d in url for d in DISTRACTING_DOMAINS) else 0.0
-    raw['goal_relevance'] = _get_relevance_score(title, goal)
-    return np.array([raw.get(k, 0) for k in FEATURE_KEYS], dtype=np.float64)
+    normalized['is_distracting'] = 1.0 if ae.is_distracting(url) else 0.0
+    normalized['goal_relevance'] = _get_relevance_score(title, goal)
+
+    drift = ae.compute_drift(normalized)
+    normalized['drift_score'] = drift['drift_score']
+
+    return np.array([normalized.get(k, 0) for k in FEATURE_KEYS], dtype=np.float64)
+
 
 def normalize(features, stats=None):
     if stats is None:
@@ -29,6 +38,7 @@ def normalize(features, stats=None):
     stds = np.array([stats.get(k, {}).get('std', 1) for k in FEATURE_KEYS])
     stds[stds == 0] = 1
     return (features - means) / stds
+
 
 def compute_stats(feature_list):
     if not feature_list:

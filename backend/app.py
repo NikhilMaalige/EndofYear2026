@@ -12,13 +12,18 @@ classifier.ensure_bootstrap_model()
 @app.route('/api/predict', methods=['POST'])
 def predict():
     features = request.json
-    state, confidence, reason, suggestion, source = gemini_analyzer.analyze(features)
+    result = gemini_analyzer.analyze(features)
+    state, confidence, reason, suggestion, source, drift_score, components, top_component, drift_source = result
     return jsonify({
-        'state': state, 
+        'state': state,
         'confidence': round(confidence, 3),
+        'drift_score': round(drift_score, 4),
+        'drift_source': drift_source,
+        'components': components,
+        'top_component': top_component,
         'reason': reason,
         'suggestion': suggestion,
-        'source': source
+        'source': source,
     })
 
 @app.route('/api/signals', methods=['POST'])
