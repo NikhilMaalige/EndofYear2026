@@ -26,17 +26,64 @@ def load_config():
     return _CONFIG
 
 
+# Terms that signal a video/page is *supporting* a goal even without direct keyword overlap.
+# Keys are goal-domain keywords; values are sets of title terms that are task-supportive.
+_GOAL_SUPPORT_CLUSTERS = {
+    # academic writing
+    'essay':    {'essay', 'write', 'writing', 'thesis', 'argument', 'paragraph',
+                 'outline', 'draft', 'revision', 'cite', 'citation', 'analyze',
+                 'analysis', 'structure', 'introduction', 'conclusion', 'body'},
+    'homework': {'homework', 'study', 'learn', 'tutorial', 'guide', 'tips',
+                 'practice', 'solve', 'explain', 'review'},
+    'study':    {'study', 'learn', 'tutorial', 'guide', 'tips', 'review', 'explain'},
+    'code':     {'code', 'coding', 'programming', 'debug', 'tutorial', 'algorithm'},
+    'math':     {'math', 'algebra', 'calculus', 'equation', 'problem', 'solve'},
+    'history':  {'history', 'historical', 'era', 'war', 'revolution', 'century'},
+    'science':  {'science', 'biology', 'chemistry', 'physics', 'experiment', 'lab'},
+}
+
+
+# Domains that are video/media players — passive behavior (idle, low interaction)
+# is expected and should not count against you when content is goal-relevant.
+_VIDEO_DOMAINS = {'youtube', 'vimeo', 'twitch', 'dailymotion', 'coursera',
+                  'udemy', 'khanacademy', 'ted', 'nebula'}
+
+
+def _is_video_site(url):
+    url_lower = str(url).lower()
+    return any(d in url_lower for d in _VIDEO_DOMAINS)
+
+
 def _get_relevance_score(title, goal):
+    """Return a 0‒1 score for how relevant `title` is to `goal`.
+
+    Uses both direct keyword overlap and a cluster-based expansion so that
+    a video titled "How to Write a Good Essay" is considered relevant when
+    the goal mentions "essay", even though the subject (e.g. Hamlet) differs.
+    """
     if not title or not goal:
         return 0.0
-    t_words = set(re.findall(r'\w+', str(title).lower()))
-    g_words = set(re.findall(r'\w+', str(goal).lower()))
-    stop_words = {'for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is', 'my', 'how', 'what', 'why', 'with'}
-    t_words -= stop_words
-    g_words -= stop_words
+    stop_words = {'for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is',
+                  'my', 'how', 'what', 'why', 'with', 'do', 'does', 'be',
+                  'are', 'was', 'were', 'an', 'at', 'by', 'this', 'that'}
+    t_words = set(re.findall(r'\w+', str(title).lower())) - stop_words
+    g_words = set(re.findall(r'\w+', str(goal).lower())) - stop_words
     if not g_words:
         return 0.0
-    return float(len(t_words.intersection(g_words))) / len(g_words)
+
+    # Direct overlap score (0‒1)
+    direct = float(len(t_words.intersection(g_words))) / len(g_words)
+
+    # Cluster-based support score: does the title support any goal domain?
+    support_bonus = 0.0
+    for goal_keyword, support_terms in _GOAL_SUPPORT_CLUSTERS.items():
+        if goal_keyword in g_words:          # goal is in this domain
+            overlap = t_words.intersection(support_terms)
+            if overlap:
+                # Each matched support term adds up to 0.35 bonus, capped at 0.6
+                support_bonus = max(support_bonus, min(0.35 * len(overlap), 0.6))
+
+    return min(direct + support_bonus, 1.0)
 
 
 def is_distracting(url, config=None):
@@ -124,6 +171,14 @@ def compute_drift(raw_features):
     relevance = features.get('goal_relevance', 0)
     distracting = is_distracting(url, config)
 
+    # Detect goal-relevant video watching.  Passive signals (idle, low
+    # interaction, passive browsing) are normal when watching a video and
+    # should not be counted as drift when the content is on-task.
+    video_site = _is_video_site(url)
+    relevant_video = video_site and goal and relevance >= mods.get('video_relevance_threshold', 0.35)
+    # suppress factor: 0 = fully suppressed, 1 = not suppressed
+    video_suppress = max(0.0, 1.0 - relevance) if relevant_video else 1.0
+
     components = {
         'tab_switch_rate': signal_drift(
             features.get('tab_switches_per_min', 0),
@@ -143,12 +198,14 @@ def compute_drift(raw_features):
             sig['scroll_consistency']['drifting_at'],
             sig['scroll_consistency']['gone_at'],
         ),
+        # Idle time and low interaction are expected while watching a video —
+        # scale them down proportionally when content is goal-relevant.
         'idle_time': signal_drift(
             features.get('idle_seconds', 0),
             sig['idle_seconds']['focused_max'],
             sig['idle_seconds']['drifting_at'],
             sig['idle_seconds']['gone_at'],
-        ),
+        ) * video_suppress,
         'direction_chaos': signal_drift(
             features.get('direction_changes_per_min', 0),
             sig['direction_changes_per_min']['focused_max'],
@@ -160,20 +217,33 @@ def compute_drift(raw_features):
             sig['interaction_per_min']['focused_min'],
             sig['interaction_per_min']['drifting_below'],
             sig['interaction_per_min']['gone_below'],
+        ) * video_suppress,
+        # passive_browse is inherently high when watching any video — suppress it too.
+        'passive_browse': features.get('passive_browse_score', 0) * video_suppress,
+        # Distracting context scales down with relevance; fully relevant = 0.
+        'distracting_context': (
+            0.0 if not distracting else
+            max(0.0, 1.0 - relevance / max(mods['distracting_mismatch_threshold'], 0.001))
+            if goal else 1.0
         ),
-        'passive_browse': features.get('passive_browse_score', 0),
-        'distracting_context': 1.0 if distracting else 0.0,
-        'goal_mismatch': 1.0 if distracting and goal and relevance < mods['distracting_mismatch_threshold'] else (
-            0.5 if distracting and not goal else 0.0
+        'goal_mismatch': (
+            1.0 if distracting and goal and relevance < mods['distracting_mismatch_threshold'] else
+            0.5 if distracting and not goal else
+            0.0
         ),
     }
 
     drift_score = sum(weights[k] * components[k] for k in weights)
-    peak_signal = max(components.values()) if components else 0.0
-    drift_score = max(drift_score, peak_signal * 0.85)
+    # Skip the peak_signal floor for relevant video watching — the floor would
+    # re-introduce suppressed passive signals through the back door.
+    if not relevant_video:
+        peak_signal = max(components.values()) if components else 0.0
+        drift_score = max(drift_score, peak_signal * 0.85)
     drift_score = max(0.0, min(1.0, drift_score))
 
-    if not distracting and goal and relevance > mods['goal_alignment_threshold']:
+    # Goal alignment bonus applies to any site (including YouTube) when the
+    # content is actually relevant — not just non-distracting sites.
+    if goal and relevance > mods['goal_alignment_threshold']:
         drift_score = max(0.0, drift_score + mods['goal_alignment_bonus'])
     if distracting and goal and relevance < mods['distracting_mismatch_threshold']:
         drift_score = min(1.0, drift_score + mods['distracting_mismatch_penalty'])
@@ -189,6 +259,16 @@ def compute_drift(raw_features):
         drift_score = min(1.0, drift_score + mods['session_fatigue_penalty'])
 
     drift_score = max(0.0, min(1.0, drift_score))
+
+    # EMA Smoothing: smooth out drift score transitions
+    prev_score = features.get('previous_drift_score')
+    if prev_score is not None:
+        if drift_score < prev_score:
+            # Slow recovery (e.g. going back to task)
+            drift_score = prev_score * 0.85 + drift_score * 0.15
+        else:
+            # Fast reaction to new drifting signals
+            drift_score = prev_score * 0.30 + drift_score * 0.70
 
     if drift_score < states['focused_max']:
         state = 'focused'

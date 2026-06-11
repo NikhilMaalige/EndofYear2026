@@ -372,6 +372,7 @@ async function buildFeatureVectorFromLatest(latest, goal) {
     content_length: rates.content_length,
     scroll_depth_vs_time: rates.window5.length > 0 ? rates.avgScrollDepth / (sessionMin || 1) : 0,
     consecutive_drift: state.consecutiveDriftSignals,
+    previous_drift_score: state.currentDriftScore,
   };
 }
 

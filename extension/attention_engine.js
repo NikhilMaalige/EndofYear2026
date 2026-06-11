@@ -20,13 +20,46 @@ async function loadConfig() {
   return _config;
 }
 
+const _GOAL_SUPPORT_CLUSTERS = {
+  essay: new Set(['essay', 'write', 'writing', 'thesis', 'argument', 'paragraph', 'outline', 'draft', 'revision', 'cite', 'citation', 'analyze', 'analysis', 'structure', 'introduction', 'conclusion', 'body']),
+  homework: new Set(['homework', 'study', 'learn', 'tutorial', 'guide', 'tips', 'practice', 'solve', 'explain', 'review']),
+  study: new Set(['study', 'learn', 'tutorial', 'guide', 'tips', 'review', 'explain']),
+  code: new Set(['code', 'coding', 'programming', 'debug', 'tutorial', 'algorithm']),
+  math: new Set(['math', 'algebra', 'calculus', 'equation', 'problem', 'solve']),
+  history: new Set(['history', 'historical', 'era', 'war', 'revolution', 'century']),
+  science: new Set(['science', 'biology', 'chemistry', 'physics', 'experiment', 'lab']),
+};
+
+const _VIDEO_DOMAINS = new Set(['youtube', 'vimeo', 'twitch', 'dailymotion', 'coursera', 'udemy', 'khanacademy', 'ted', 'nebula']);
+
+function isVideoSite(url) {
+  const urlLower = String(url || '').toLowerCase();
+  for (const d of _VIDEO_DOMAINS) {
+    if (urlLower.includes(d)) return true;
+  }
+  return false;
+}
+
 function goalRelevance(title, goal) {
   if (!title || !goal) return 0;
-  const stop = new Set(['for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is', 'my', 'how', 'what', 'why', 'with']);
+  const stop = new Set(['for', 'and', 'the', 'to', 'a', 'in', 'of', 'on', 'is', 'my', 'how', 'what', 'why', 'with', 'do', 'does', 'be', 'are', 'was', 'were', 'an', 'at', 'by', 'this', 'that']);
   const tw = new Set(title.toLowerCase().split(/\W+/).filter(w => w && !stop.has(w)));
-  const gw = goal.toLowerCase().split(/\W+/).filter(w => w && !stop.has(w));
-  if (!gw.length) return 0;
-  return gw.filter(w => tw.has(w)).length / gw.length;
+  const gw = new Set(goal.toLowerCase().split(/\W+/).filter(w => w && !stop.has(w)));
+  if (gw.size === 0) return 0;
+
+  const direct = Array.from(gw).filter(w => tw.has(w)).length / gw.size;
+
+  let supportBonus = 0;
+  for (const [key, terms] of Object.entries(_GOAL_SUPPORT_CLUSTERS)) {
+    if (gw.has(key)) {
+      const overlap = Array.from(terms).filter(t => tw.has(t)).length;
+      if (overlap > 0) {
+        supportBonus = Math.max(supportBonus, Math.min(0.35 * overlap, 0.6));
+      }
+    }
+  }
+
+  return Math.min(direct + supportBonus, 1);
 }
 
 function isDistracting(url, config) {
@@ -130,6 +163,11 @@ function computeDriftSync(rawFeatures, config) {
   const relevance = features.goal_relevance || 0;
   const distracting = isDistracting(url, config);
 
+  const videoSite = isVideoSite(url);
+  const videoRelevanceThreshold = mods.video_relevance_threshold || 0.35;
+  const relevantVideo = videoSite && goal && relevance >= videoRelevanceThreshold;
+  const videoSuppress = relevantVideo ? Math.max(0, 1 - relevance) : 1;
+
   const components = {
     tab_switch_rate: signalDrift(
       features.tab_switches_per_min || 0,
@@ -154,7 +192,7 @@ function computeDriftSync(rawFeatures, config) {
       sig.idle_seconds.focused_max,
       sig.idle_seconds.drifting_at,
       sig.idle_seconds.gone_at,
-    ),
+    ) * videoSuppress,
     direction_chaos: signalDrift(
       features.direction_changes_per_min || 0,
       sig.direction_changes_per_min.focused_max,
@@ -166,20 +204,22 @@ function computeDriftSync(rawFeatures, config) {
       sig.interaction_per_min.focused_min,
       sig.interaction_per_min.drifting_below,
       sig.interaction_per_min.gone_below,
-    ),
-    passive_browse: features.passive_browse_score || 0,
-    distracting_context: distracting ? 1 : 0,
+    ) * videoSuppress,
+    passive_browse: (features.passive_browse_score || 0) * videoSuppress,
+    distracting_context: !distracting ? 0 : goal ? Math.max(0, 1 - relevance / Math.max(mods.distracting_mismatch_threshold, 0.001)) : 1,
     goal_mismatch: distracting && goal && relevance < mods.distracting_mismatch_threshold
       ? 1
       : distracting && !goal ? 0.5 : 0,
   };
 
   let driftScore = Object.keys(weights).reduce((sum, k) => sum + weights[k] * (components[k] || 0), 0);
-  const peakSignal = Math.max(...Object.values(components), 0);
-  driftScore = Math.max(driftScore, peakSignal * 0.85);
+  if (!relevantVideo) {
+    const peakSignal = Math.max(...Object.values(components), 0);
+    driftScore = Math.max(driftScore, peakSignal * 0.85);
+  }
   driftScore = Math.max(0, Math.min(1, driftScore));
 
-  if (!distracting && goal && relevance > mods.goal_alignment_threshold) {
+  if (goal && relevance > mods.goal_alignment_threshold) {
     driftScore = Math.max(0, driftScore + mods.goal_alignment_bonus);
   }
   if (distracting && goal && relevance < mods.distracting_mismatch_threshold) {
@@ -199,6 +239,15 @@ function computeDriftSync(rawFeatures, config) {
   }
 
   driftScore = Math.max(0, Math.min(1, driftScore));
+
+  const prevScore = features.previous_drift_score;
+  if (prevScore != null) {
+    if (driftScore < prevScore) {
+      driftScore = prevScore * 0.85 + driftScore * 0.15;
+    } else {
+      driftScore = prevScore * 0.30 + driftScore * 0.70;
+    }
+  }
 
   let state;
   let confidence;
