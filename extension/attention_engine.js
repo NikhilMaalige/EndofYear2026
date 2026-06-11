@@ -67,6 +67,21 @@ function isDistracting(url, config) {
   return config.distracting_domains.some(d => urlLower.includes(d));
 }
 
+function _isYouTubeVideoPage(url, urlPath) {
+  const urlLower = String(url || '').toLowerCase();
+  if (!urlLower.includes('youtube')) return false;
+  const path = String(urlPath || '').toLowerCase();
+  return path.startsWith('/watch') || path.startsWith('/shorts') || path.startsWith('/embed');
+}
+
+function isDistractingInContext(url, urlPath, config) {
+  const urlLower = String(url || '').toLowerCase();
+  if (urlLower.includes('youtube')) {
+    return _isYouTubeVideoPage(url, urlPath);
+  }
+  return config.distracting_domains.some(d => urlLower.includes(d));
+}
+
 function signalDrift(value, focusedMax, driftingAt, goneAt) {
   if (value <= focusedMax) return 0;
   if (value >= goneAt) return 1;
@@ -115,7 +130,7 @@ function normalizeFeatures(raw, config) {
     features.goal_relevance = goalRelevance(title, goal);
   }
   if (features.is_distracting == null) {
-    features.is_distracting = isDistracting(url, config) ? 1 : 0;
+    features.is_distracting = isDistractingInContext(url, features.current_url_path, config) ? 1 : 0;
   }
   return features;
 }
@@ -128,6 +143,11 @@ function buildReason(features, components, state, topComponents, weights) {
   const relevance = features.goal_relevance || 0;
 
   if (state === 'focused') {
+    const keypresses = features.keypresses_per_min || 0;
+    const typingWpm = keypresses / 5.0;
+    if (typingWpm >= 50.0 && typingWpm <= 150.0) {
+      return 'You are typing at a focused pace.';
+    }
     if (goal && relevance > 0.4) return 'Page content aligns with your goal.';
     return 'Behavior patterns look steady and on-task.';
   }
@@ -159,9 +179,10 @@ function computeDriftSync(rawFeatures, config) {
   const states = config.states;
 
   const url = features.current_url || '';
+  const urlPath = features.current_url_path || '';
   const goal = features.current_goal || '';
   const relevance = features.goal_relevance || 0;
-  const distracting = isDistracting(url, config);
+  const distracting = isDistractingInContext(url, urlPath, config);
 
   const videoSite = isVideoSite(url);
   const videoRelevanceThreshold = mods.video_relevance_threshold || 0.35;
@@ -249,6 +270,13 @@ function computeDriftSync(rawFeatures, config) {
     }
   }
 
+  // Typing focus override: typing at a reasonable pace (50-150 WPM) assumes focused.
+  const keypresses = features.keypresses_per_min || 0;
+  const typingWpm = keypresses / 5.0;
+  if (typingWpm >= 50.0 && typingWpm <= 150.0) {
+    driftScore = Math.min(driftScore, 0.20);
+  }
+
   let state;
   let confidence;
   if (driftScore < states.focused_max) {
@@ -290,5 +318,5 @@ async function computeDrift(rawFeatures) {
 
 // Export for service worker (no module bundler)
 if (typeof self !== 'undefined') {
-  self.attentionEngine = { loadConfig, computeDrift, computeDriftSync, goalRelevance, isDistracting, SIGNAL_LABELS };
+  self.attentionEngine = { loadConfig, computeDrift, computeDriftSync, goalRelevance, isDistracting, isDistractingInContext, SIGNAL_LABELS };
 }

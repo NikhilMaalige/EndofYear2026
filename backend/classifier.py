@@ -22,15 +22,27 @@ _stats = None
 def _load():
     global _model, _scaler, _stats
     if os.path.exists(MODEL_PATH):
-        bundle = joblib.load(MODEL_PATH)
-        if isinstance(bundle, dict):
-            _model = bundle.get('model')
-            _scaler = bundle.get('scaler')
-        else:
-            _model = bundle
+        try:
+            bundle = joblib.load(MODEL_PATH)
+            if isinstance(bundle, dict):
+                _model = bundle.get('model')
+                _scaler = bundle.get('scaler')
+            else:
+                _model = bundle
+        except Exception as e:
+            print(f"Warning: Failed to load model from {MODEL_PATH}: {e}. Removing stale model file.")
+            _model = None
+            _scaler = None
+            try:
+                os.remove(MODEL_PATH)
+            except Exception:
+                pass
     if os.path.exists(STATS_PATH):
-        with open(STATS_PATH) as f:
-            _stats = json.load(f)
+        try:
+            with open(STATS_PATH) as f:
+                _stats = json.load(f)
+        except Exception:
+            _stats = None
 
 
 def _generate_bootstrap_samples():

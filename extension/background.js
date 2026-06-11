@@ -353,6 +353,7 @@ async function buildFeatureVectorFromLatest(latest, goal) {
 
   return {
     current_url: last.url,
+    current_url_path: last.url_path || '',
     page_title: last.title,
     current_goal: goal || '',
     recent_sites: state.recentSites,

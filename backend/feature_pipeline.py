@@ -20,9 +20,10 @@ def _get_relevance_score(title, goal):
 def extract(raw):
     normalized = ae.normalize_features(raw)
     url = str(raw.get('current_url', ''))
+    url_path = str(raw.get('current_url_path', ''))
     title = str(raw.get('page_title', ''))
     goal = str(raw.get('current_goal', ''))
-    normalized['is_distracting'] = 1.0 if ae.is_distracting(url) else 0.0
+    normalized['is_distracting'] = 1.0 if ae.is_distracting_in_context(url, url_path) else 0.0
     normalized['goal_relevance'] = _get_relevance_score(title, goal)
 
     drift = ae.compute_drift(normalized)

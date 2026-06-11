@@ -1,87 +1,51 @@
-# Attention Guard — Build Complete ✅ (Gemini Powered)
+# Attention Guard — Context-Aware YouTube Flagging ✅
 
-All systems have been upgraded to use **Gemini 2.5 Flash** for intelligent, context-aware off-track detection.
+All systems have been updated to make YouTube flagging context-aware. Opening YouTube will no longer immediately flag the site as distracting. Instead, the extension waits until you actually open a video to determine if the content matches your goal or constitutes a distraction.
+
+---
+
+## What Changed
+
+1. **Path-level detection**: We updated both the extension (JavaScript) and the backend (Python) to check the URL pathname.
+2. **Flagging Logic**:
+   - `youtube.com` (homepage, search, subscription feed, history, etc.) is **not** immediately treated as distracting context.
+   - Only URLs containing video watch paths (`/watch`, `/shorts`, `/embed`) are classified as distracting.
+3. **Signal Pipeline**:
+   - `content.js` now forwards `url_path: location.pathname` to the background.
+   - `background.js` maps this to `current_url_path` in the feature vector.
+   - `attention_engine.js` and `attention_engine.py` use the new context-sensitive checks when analyzing drift.
 
 ---
 
 ## Files Created/Modified
 
 ### Extension (`extension/`)
-| File | Purpose |
-|------|---------|
-| [manifest.json](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/manifest.json) | Chrome Manifest V3 — permissions, content scripts, service worker |
-| [content.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/content.js) | Runs on every page, collects scroll/mouse/click signals every 5s |
-| [background.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/background.js) | Service worker — aggregates signals + page context, calls Flask every 30s |
-| [intervention.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/intervention.js) | Fade/mirror/recall overlays triggered by state changes. Now displays AI reason and suggestions |
-| [intervention.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/intervention.css) | Styles for intervention overlays, including the new AI reasoning box |
-| [popup.html](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.html) | Popup UI — manual labeling + goal setting |
-| [popup.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.js) | Popup logic |
-| [popup.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.css) | Popup dark theme styles |
-| [dashboard.html](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.html) | Full analytics dashboard page |
-| [dashboard.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.js) | Dashboard rendering — heatmap, charts, site breakdown |
-| [dashboard.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.css) | Dashboard dark theme styles |
+| File | Changes Made |
+|------|--------------|
+| [content.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/content.js) | Sends `url_path` parameter to the background service worker |
+| [background.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/background.js) | Captures and includes `current_url_path` in the final signal feature vector |
+| [attention_engine.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/attention_engine.js) | Implements path-level checks for YouTube; only considers `/watch`, `/shorts`, or `/embed` as distracting |
 
 ### Backend (`backend/`)
-| File | Purpose |
-|------|---------|
-| [app.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/app.py) | Flask server — all API endpoints |
-| [gemini_analyzer.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/gemini_analyzer.py) | **[NEW]** Gemini API integration with prompt design, caching, and rate limiting |
-| [storage.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/storage.py) | SQLite storage layer, now records AI reasoning, suggestions, and source |
-| [feature_pipeline.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/feature_pipeline.py) | Feature extraction + normalization |
-| [classifier.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/classifier.py) | RandomForest classifier, now serves as an offline fallback |
-| [requirements.txt](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/requirements.txt) | Python dependencies, including `google-genai` |
+| File | Changes Made |
+|------|--------------|
+| [attention_engine.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/attention_engine.py) | Implements equivalent Python path-level check for YouTube to ensure backend/Gemini predictions align |
+| [feature_pipeline.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/feature_pipeline.py) | Updates feature pipeline extraction to feed `url_path` into context checks |
+| [test_attention_engine.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/test_attention_engine.py) | Added tests verifying YouTube homepage is ignored while video pages trigger standard distraction rules |
 
 ---
 
-## What YOU Need to Do
+## Verification & Testing
 
-### Step 1: Start the Flask backend
-```bash
-cd c:\Users\PC\Desktop\School\EndofYear2026\backend
-python app.py
+### 1. Run Backend Tests
+All tests in the attention engine verify that this behavior is correct:
+```powershell
+cd c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\backend
+python -m unittest test_attention_engine.TestComputeDrift
 ```
-You should see: `Running on http://127.0.0.1:5000`
+*Result:* All 8 tests passed successfully, confirming homepage URL passes as non-distracting while video URLs get flagged as mismatch/distracting.
 
-> [!IMPORTANT]
-> Keep this terminal running. The extension uses it to talk to Gemini.
-> Ensure your `.env` file containing the `GEMINI_API_KEY` remains in the project root directory.
-
-### Step 2: Load the extension in Chrome
-1. Open Chrome and go to `chrome://extensions`
-2. Toggle **Developer mode** ON (top-right)
-3. Click **Load unpacked**
-4. Select the folder: `c:\Users\PC\Desktop\School\EndofYear2026\extension`
-
-### Step 3: Verify it works
-1. Open any webpage (e.g., Wikipedia)
-2. Open **DevTools → Console** on that page — you should see no errors
-3. Click the **Attention Guard** extension icon in the toolbar, set a goal like "Research essay"
-4. Open a distracting site like Reddit. Wait up to 30 seconds.
-5. The extension will fade or show the "Gone" screen with a **custom message and suggestion generated by Gemini**!
-
----
-
-## How It All Works Together (Gemini Update)
-
-```
-content.js (every page)
-    ↓ scroll/mouse/click signals, URL, Title
-background.js (service worker)
-    ↓ aggregates and buffers signals + adds current goal + recent sites
-    ↓ checks every 30 seconds
-Flask backend (localhost:5000)
-    ↓ sends prompt to gemini_analyzer.py
-    ↓ handles caching to avoid Gemini rate limits
-Gemini 2.5 Flash
-    ↓ context-aware analysis: "User is on Reddit but their goal is research."
-Flask backend
-    ↓ returns state (focused/drifting/gone), reason, and suggestion
-background.js
-    ↓ broadcasts STATE_CHANGE message
-intervention.js (content script)
-    → Drifting: page fades to black gradually
-    → Gone: mirror overlay with AI reason + suggestion + recall prompt
-```
-
-> [!NOTE]
-> If the Gemini API is ever rate-limited or your internet disconnects, the system instantly fails back to the local `classifier.py` so the extension never breaks.
+### 2. Apply Changes in browser
+1. Go to `chrome://extensions/` in Chrome.
+2. Click the **Reload** (refresh) icon on the **Attention Guard** card.
+3. Restart your Flask backend to load the updated Python models and engines.

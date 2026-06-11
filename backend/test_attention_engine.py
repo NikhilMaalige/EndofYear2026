@@ -72,6 +72,50 @@ class TestComputeDrift(unittest.TestCase):
         self.assertEqual(result['state'], 'gone')
         self.assertGreater(result['drift_score'], 0.64)
 
+    def test_youtube_homepage_not_distracting(self):
+        raw_homepage = self._base(
+            current_url='youtube.com',
+            current_url_path='/',
+            current_goal='finish homework',
+        )
+        res_homepage = ae.compute_drift(raw_homepage)
+        self.assertEqual(res_homepage['components']['distracting_context'], 0.0)
+        self.assertEqual(res_homepage['components']['goal_mismatch'], 0.0)
+        self.assertFalse(res_homepage['is_distracting'])
+
+    def test_youtube_video_is_distracting(self):
+        raw_video = self._base(
+            current_url='youtube.com',
+            current_url_path='/watch?v=123',
+            current_goal='finish homework',
+        )
+        res_video = ae.compute_drift(raw_video)
+        self.assertGreater(res_video['components']['distracting_context'], 0.0)
+        self.assertGreater(res_video['components']['goal_mismatch'], 0.0)
+        self.assertTrue(res_video['is_distracting'])
+
+    def test_typing_focused_pace(self):
+        # 300 keypresses/min is 60 WPM (which is between 50 and 150 WPM)
+        # Even with high tab switching rate, typing at a focused pace should override to focused.
+        raw_typing = self._base(
+            keypresses_per_min=300,
+            tab_switches_per_min=35,
+            tab_switches_5min=35,
+        )
+        res = ae.compute_drift(raw_typing)
+        self.assertEqual(res['state'], 'focused')
+        self.assertEqual(res['reason'], 'You are typing at a focused pace.')
+
+    def test_typing_out_of_bounds(self):
+        # 100 keypresses/min is 20 WPM (too low to override)
+        raw_slow = self._base(
+            keypresses_per_min=100,
+            tab_switches_per_min=35,
+            tab_switches_5min=35,
+        )
+        res = ae.compute_drift(raw_slow)
+        self.assertNotEqual(res['state'], 'focused')
+
     def test_goal_relevance_keeps_focused(self):
         result = ae.compute_drift(self._base(
             current_url='docs.google.com',

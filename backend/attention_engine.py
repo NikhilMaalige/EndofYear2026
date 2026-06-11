@@ -92,6 +92,22 @@ def is_distracting(url, config=None):
     return any(d in url_lower for d in config['distracting_domains'])
 
 
+def _is_youtube_video_page(url, url_path):
+    url_lower = str(url).lower()
+    if 'youtube' not in url_lower:
+        return False
+    path = str(url_path or '').lower()
+    return path.startswith('/watch') or path.startswith('/shorts') or path.startswith('/embed')
+
+
+def is_distracting_in_context(url, url_path, config=None):
+    url_lower = str(url).lower()
+    if 'youtube' in url_lower:
+        return _is_youtube_video_page(url, url_path)
+    config = config or load_config()
+    return any(d in url_lower for d in config['distracting_domains'])
+
+
 def signal_drift(value, focused_max, drifting_at, gone_at):
     if value <= focused_max:
         return 0.0
@@ -147,12 +163,13 @@ def normalize_features(raw):
         features['passive_browse_score'] = passive_browse_score(scroll_vel, mouse, interaction)
 
     url = str(features.get('current_url', ''))
+    url_path = str(features.get('current_url_path', ''))
     title = str(features.get('page_title', ''))
     goal = str(features.get('current_goal', ''))
     if 'goal_relevance' not in features:
         features['goal_relevance'] = _get_relevance_score(title, goal)
     if 'is_distracting' not in features:
-        features['is_distracting'] = 1.0 if is_distracting(url) else 0.0
+        features['is_distracting'] = 1.0 if is_distracting_in_context(url, url_path) else 0.0
 
     return features
 
@@ -166,10 +183,11 @@ def compute_drift(raw_features):
     states = config['states']
 
     url = str(features.get('current_url', ''))
+    url_path = str(features.get('current_url_path', ''))
     title = str(features.get('page_title', ''))
     goal = str(features.get('current_goal', ''))
     relevance = features.get('goal_relevance', 0)
-    distracting = is_distracting(url, config)
+    distracting = is_distracting_in_context(url, url_path, config)
 
     # Detect goal-relevant video watching.  Passive signals (idle, low
     # interaction, passive browsing) are normal when watching a video and
@@ -270,6 +288,12 @@ def compute_drift(raw_features):
             # Fast reaction to new drifting signals
             drift_score = prev_score * 0.30 + drift_score * 0.70
 
+    # Typing focus override: typing at a reasonable pace (50-150 WPM) assumes focused.
+    keypresses = features.get('keypresses_per_min', 0)
+    typing_wpm = keypresses / 5.0
+    if 50.0 <= typing_wpm <= 150.0:
+        drift_score = min(drift_score, 0.20)
+
     if drift_score < states['focused_max']:
         state = 'focused'
         confidence = min(0.65 + (states['focused_max'] - drift_score) * 0.5, 0.92)
@@ -308,6 +332,10 @@ def build_reason(features, components, state, top_components=None):
     relevance = features.get('goal_relevance', 0)
 
     if state == 'focused':
+        keypresses = features.get('keypresses_per_min', 0)
+        typing_wpm = keypresses / 5.0
+        if 50.0 <= typing_wpm <= 150.0:
+            return 'You are typing at a focused pace.'
         if goal and relevance > 0.4:
             return 'Page content aligns with your goal.'
         return 'Behavior patterns look steady and on-task.'

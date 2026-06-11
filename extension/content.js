@@ -101,6 +101,7 @@
         scrollDepth: Math.round(scrollDepth * 1000) / 1000,
         contentLength,
         url: location.hostname,
+        url_path: location.pathname,
         title: document.title,
         timestamp: now
       }
