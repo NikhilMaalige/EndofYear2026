@@ -1,35 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="dark">
 <head>
   <meta charset="utf-8">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
-    <h1>Attention Guard</h1>
+    <div class="header-row">
+      <h1>Attention Guard</h1>
+      <button id="theme-toggle" class="theme-toggle" title="Toggle theme">☀</button>
+    </div>
     <div id="status" class="status-badge">—</div>
     <div class="stats" id="stats"></div>
     <div class="section">
       <h2>How do you feel?</h2>
       <div class="label-buttons">
-        <button data-label="focused" class="btn focused">🎯 Focused</button>
-        <button data-label="drifting" class="btn drifting">😶‍🌫️ Drifting</button>
-        <button data-label="gone" class="btn gone">💀 Gone</button>
+        <button data-label="focused" class="btn focused">Focused</button>
+        <button data-label="drifting" class="btn drifting">Drifting</button>
+        <button data-label="gone" class="btn gone">Gone</button>
       </div>
       <div id="label-feedback" class="feedback"></div>
     </div>
     <div class="section">
       <h2>Current Goal</h2>
-      <div id="current-goal-display" style="font-size: 13px; color: #f3f4f6; margin-bottom: 8px; padding: 8px; background: #1a1a24; border-radius: 6px; border-left: 3px solid #60a5fa;">
-        Not set
-      </div>
-      <input type="text" id="goal-input" placeholder="Set a new goal..." style="margin-top: 4px;">
-      <button id="set-goal" class="btn primary">Update Goal</button>
+      <div id="current-goal-display" class="goal-display">Not set</div>
+      <input type="text" id="goal-input" placeholder="What are you working on?">
+      <button id="set-goal" class="btn primary">Update goal</button>
     </div>
-    <a href="dashboard.html" target="_blank" class="dashboard-link">Open Dashboard →</a>
+    <div class="divider"></div>
+    <a href="dashboard.html" target="_blank" class="dashboard-link">Open dashboard →</a>
     <div id="model-status" class="model-status"></div>
     <div class="snooze-row">
-      <button id="snooze-btn" class="btn snooze">😴 Snooze 30m</button>
+      <button id="snooze-btn" class="btn snooze">Snooze 30m</button>
       <span id="snooze-label" class="snooze-label"></span>
     </div>
   </div>

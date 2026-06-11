@@ -1,5 +1,23 @@
 (function () {
   const S = { scrollY: 0, lastScrollY: 0, scrollEvents: [], mouseEvents: [], clicks: 0, dirChanges: 0, lastDir: 0, hoverStart: null, hoversWithoutClick: 0, keypresses: 0, lastActivityTime: Date.now() };
+  let recentScrolls = [];
+  let recentMouse = [];
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      S.lastActivityTime = Date.now();
+    }
+  });
+
+  let wasHiddenLong = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      wasHiddenLong = true;
+    } else if (wasHiddenLong) {
+      wasHiddenLong = false;
+      chrome.runtime.sendMessage({ type: 'REALIZATION_CHECK', reason: 'tab_return' });
+    }
+  });
 
   window.addEventListener('scroll', () => {
     const y = window.scrollY, dy = y - S.lastScrollY, dir = Math.sign(dy);
@@ -8,11 +26,37 @@
     S.scrollEvents.push({ y, t: Date.now(), dy });
     S.lastScrollY = y;
     S.lastActivityTime = Date.now();
+
+    recentScrolls.push({ y, t: Date.now() });
+    if (recentScrolls.length > 10) recentScrolls.shift();
+    if (recentScrolls.length > 2) {
+      const oldest = recentScrolls[0];
+      const newest = recentScrolls[recentScrolls.length - 1];
+      const dt_scroll = newest.t - oldest.t;
+      const dy_scroll = newest.y - oldest.y;
+      if (dt_scroll > 0 && dt_scroll < 500 && dy_scroll < -800) {
+        chrome.runtime.sendMessage({ type: 'SELF_CORRECT', reason: 'recoil_scroll' });
+        recentScrolls = [];
+      }
+    }
   }, { passive: true });
 
   window.addEventListener('mousemove', (e) => {
     S.mouseEvents.push({ x: e.clientX, y: e.clientY, t: Date.now() });
     S.lastActivityTime = Date.now();
+
+    recentMouse.push({ y: e.clientY, t: Date.now() });
+    if (recentMouse.length > 10) recentMouse.shift();
+    if (recentMouse.length > 2) {
+      const oldest = recentMouse[0];
+      const newest = recentMouse[recentMouse.length - 1];
+      const dt_mouse = newest.t - oldest.t;
+      const dy_mouse = newest.y - oldest.y;
+      if (dt_mouse > 0 && dt_mouse < 300 && dy_mouse < -400 && newest.y < 50) {
+        chrome.runtime.sendMessage({ type: 'SELF_CORRECT', reason: 'bailout_flick' });
+        recentMouse = [];
+      }
+    }
   }, { passive: true });
 
   window.addEventListener('click', () => { S.clicks++; S.lastActivityTime = Date.now(); });

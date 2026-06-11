@@ -1,52 +1,53 @@
 <!DOCTYPE html>
-<html>
-
+<html data-theme="dark">
 <head>
   <meta charset="utf-8">
   <title>Attention Guard — Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
 </head>
-
 <body>
   <div class="dashboard">
     <header>
-      <h1>🛡️ Attention Guard</h1>
-      <p class="subtitle">Your attention, visualized</p>
+      <div class="header-top">
+        <div>
+          <h1>Attention Guard</h1>
+          <p class="subtitle">Your attention, visualized</p>
+        </div>
+        <button id="theme-toggle" class="theme-toggle" title="Toggle theme">☀</button>
+      </div>
       <div class="header-controls">
         <span id="last-updated" class="last-updated"></span>
-        <button id="refresh-btn" class="refresh-btn">↻ Refresh</button>
+        <button id="refresh-btn" class="refresh-btn">Refresh</button>
       </div>
     </header>
     <div class="grid">
       <section class="card full-width">
-        <h2>Today's Attention Timeline</h2>
+        <h2>Today's timeline</h2>
         <div id="heatmap" class="heatmap"></div>
         <div class="heatmap-legend">
           <span class="legend-item"><span class="dot focused"></span> Focused</span>
           <span class="legend-item"><span class="dot drifting"></span> Drifting</span>
-          <span class="legend-item"><span class="dot gone"></span> Gone</span>
+          <span class="legend-item"><span class="dot gone"></span> Off track</span>
         </div>
       </section>
       <section class="card">
-        <h2>Today's Summary</h2>
+        <h2>Summary</h2>
         <div id="summary" class="summary-grid"></div>
       </section>
       <section class="card">
-        <h2>Site Breakdown</h2>
+        <h2>Sites</h2>
         <div id="sites" class="site-list"></div>
       </section>
       <section class="card">
-        <h2>Intervention History</h2>
+        <h2>Catches & interventions</h2>
         <div id="interventions" class="intervention-list"></div>
       </section>
-      <section class="card">
-        <h2>Weekly Trend</h2>
+      <section class="card full-width">
+        <h2>Weekly trend</h2>
         <canvas id="trend-chart" width="400" height="200"></canvas>
       </section>
     </div>
   </div>
   <script src="dashboard.js"></script>
 </body>
-
 </html>

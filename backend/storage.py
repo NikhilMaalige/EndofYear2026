@@ -16,7 +16,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp REAL,
             features TEXT,
-            predicted_state TEXT
+            predicted_state TEXT,
+            reason TEXT,
+            suggestion TEXT,
+            source TEXT
         );
         CREATE TABLE IF NOT EXISTS labels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,9 +38,9 @@ def init_db():
     ''')
     db.commit()
 
-def store_signal(timestamp, features, state):
+def store_signal(timestamp, features, state, reason="", suggestion="", source="local"):
     db = get_db()
-    db.execute('INSERT INTO signals (timestamp, features, predicted_state) VALUES (?, ?, ?)', (timestamp, json.dumps(features), state))
+    db.execute('INSERT INTO signals (timestamp, features, predicted_state, reason, suggestion, source) VALUES (?, ?, ?, ?, ?, ?)', (timestamp, json.dumps(features), state, reason, suggestion, source))
     db.commit()
 
 def store_label(timestamp, label, features=None):

@@ -1,105 +1,87 @@
-# Attention Guard — Build Complete ✅
+# Attention Guard — Build Complete ✅ (Gemini Powered)
 
-All **17 files** have been created. Here's what was built and what you need to do.
+All systems have been upgraded to use **Gemini 2.5 Flash** for intelligent, context-aware off-track detection.
 
 ---
 
-## Files Created
+## Files Created/Modified
 
 ### Extension (`extension/`)
 | File | Purpose |
 |------|---------|
-| [manifest.json](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/manifest.json) | Chrome Manifest V3 — permissions, content scripts, service worker |
-| [content.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/content.js) | Runs on every page, collects scroll/mouse/click signals every 5s |
-| [background.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/background.js) | Service worker — aggregates signals, builds feature vectors, calls Flask every 60s |
-| [intervention.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/intervention.js) | Fade/mirror/recall overlays triggered by state changes |
-| [intervention.css](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/intervention.css) | Styles for intervention overlays |
-| [popup.html](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/popup.html) | Popup UI — manual labeling + goal setting |
-| [popup.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/popup.js) | Popup logic |
-| [popup.css](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/popup.css) | Popup dark theme styles |
-| [dashboard.html](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/dashboard.html) | Full analytics dashboard page |
-| [dashboard.js](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/dashboard.js) | Dashboard rendering — heatmap, charts, site breakdown |
-| [dashboard.css](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/extension/dashboard.css) | Dashboard dark theme styles |
-| `icons/icon16.png` | 16×16 extension icon |
-| `icons/icon48.png` | 48×48 extension icon |
-| `icons/icon128.png` | 128×128 extension icon |
+| [manifest.json](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/manifest.json) | Chrome Manifest V3 — permissions, content scripts, service worker |
+| [content.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/content.js) | Runs on every page, collects scroll/mouse/click signals every 5s |
+| [background.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/background.js) | Service worker — aggregates signals + page context, calls Flask every 30s |
+| [intervention.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/intervention.js) | Fade/mirror/recall overlays triggered by state changes. Now displays AI reason and suggestions |
+| [intervention.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/intervention.css) | Styles for intervention overlays, including the new AI reasoning box |
+| [popup.html](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.html) | Popup UI — manual labeling + goal setting |
+| [popup.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.js) | Popup logic |
+| [popup.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/popup.css) | Popup dark theme styles |
+| [dashboard.html](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.html) | Full analytics dashboard page |
+| [dashboard.js](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.js) | Dashboard rendering — heatmap, charts, site breakdown |
+| [dashboard.css](file:///c:/Users/PC/Desktop/School/EndofYear2026/extension/dashboard.css) | Dashboard dark theme styles |
 
 ### Backend (`backend/`)
 | File | Purpose |
 |------|---------|
-| [app.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/app.py) | Flask server — all API endpoints |
-| [storage.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/storage.py) | SQLite storage layer (signals, labels, interventions) |
-| [feature_pipeline.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/feature_pipeline.py) | Feature extraction + normalization |
-| [classifier.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/classifier.py) | RandomForest classifier with rule-based fallback |
-| [retrain.py](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/retrain.py) | Standalone retraining script |
-| [requirements.txt](file:///c:/Users/nmaal/OneDrive/Documents/GitHub/EndofYear2026/backend/requirements.txt) | Python dependencies |
+| [app.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/app.py) | Flask server — all API endpoints |
+| [gemini_analyzer.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/gemini_analyzer.py) | **[NEW]** Gemini API integration with prompt design, caching, and rate limiting |
+| [storage.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/storage.py) | SQLite storage layer, now records AI reasoning, suggestions, and source |
+| [feature_pipeline.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/feature_pipeline.py) | Feature extraction + normalization |
+| [classifier.py](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/classifier.py) | RandomForest classifier, now serves as an offline fallback |
+| [requirements.txt](file:///c:/Users/PC/Desktop/School/EndofYear2026/backend/requirements.txt) | Python dependencies, including `google-genai` |
 
 ---
 
 ## What YOU Need to Do
 
-### Step 1: Install Python dependencies
-Open a terminal and run:
+### Step 1: Start the Flask backend
 ```bash
-cd c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\backend
-pip install flask flask-cors scikit-learn numpy joblib
-```
-
-### Step 2: Start the Flask backend
-```bash
-cd c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\backend
+cd c:\Users\PC\Desktop\School\EndofYear2026\backend
 python app.py
 ```
 You should see: `Running on http://127.0.0.1:5000`
 
 > [!IMPORTANT]
-> Keep this terminal running. The extension talks to this backend.
+> Keep this terminal running. The extension uses it to talk to Gemini.
+> Ensure your `.env` file containing the `GEMINI_API_KEY` remains in the project root directory.
 
-### Step 3: Load the extension in Chrome
+### Step 2: Load the extension in Chrome
 1. Open Chrome and go to `chrome://extensions`
 2. Toggle **Developer mode** ON (top-right)
 3. Click **Load unpacked**
-4. Select the folder: `c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\extension`
-5. You should see "Attention Guard" appear with the shield icon
+4. Select the folder: `c:\Users\PC\Desktop\School\EndofYear2026\extension`
 
-### Step 4: Verify it works
-1. Open any webpage (e.g., Wikipedia), scroll around, click things
+### Step 3: Verify it works
+1. Open any webpage (e.g., Wikipedia)
 2. Open **DevTools → Console** on that page — you should see no errors
-3. Click the **Attention Guard** extension icon in the toolbar — popup should appear with labeling buttons
-4. In `chrome://extensions`, click the **"Service worker"** link under Attention Guard → Console — you should see no errors and alarm events every 60s
-5. The Flask terminal should start showing POST requests
-
-### Step 5: Train the model (after browsing a while)
-1. Browse normally for a while
-2. Periodically click the extension icon and label your state (Focused / Drifting / Gone)
-3. Aim for **30+ labels** across all three states
-4. Then run:
-```bash
-cd c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\backend
-python retrain.py
-```
-
-### Step 6: Open the Dashboard
-- Click "Open Dashboard →" in the extension popup, **or**
-- Open `c:\Users\nmaal\OneDrive\Documents\GitHub\EndofYear2026\extension\dashboard.html` directly in Chrome
+3. Click the **Attention Guard** extension icon in the toolbar, set a goal like "Research essay"
+4. Open a distracting site like Reddit. Wait up to 30 seconds.
+5. The extension will fade or show the "Gone" screen with a **custom message and suggestion generated by Gemini**!
 
 ---
 
-## How It All Works Together
+## How It All Works Together (Gemini Update)
 
 ```
 content.js (every page)
-    ↓ scroll/mouse/click signals every 5s
+    ↓ scroll/mouse/click signals, URL, Title
 background.js (service worker)
-    ↓ aggregated feature vector every 60s
+    ↓ aggregates and buffers signals + adds current goal + recent sites
+    ↓ checks every 30 seconds
 Flask backend (localhost:5000)
-    ↓ prediction (rule-based → trained model)
+    ↓ sends prompt to gemini_analyzer.py
+    ↓ handles caching to avoid Gemini rate limits
+Gemini 2.5 Flash
+    ↓ context-aware analysis: "User is on Reddit but their goal is research."
+Flask backend
+    ↓ returns state (focused/drifting/gone), reason, and suggestion
 background.js
-    ↓ STATE_CHANGE message on transitions
+    ↓ broadcasts STATE_CHANGE message
 intervention.js (content script)
     → Drifting: page fades to black gradually
-    → Gone: mirror overlay with stats + recall prompt
+    → Gone: mirror overlay with AI reason + suggestion + recall prompt
 ```
 
 > [!NOTE]
-> Until you train the model (Step 5), the classifier uses a **rule-based fallback** that scores your behavior based on scroll velocity, tab switches, and mouse activity. It works fine out of the box — training just personalizes it to you.
+> If the Gemini API is ever rate-limited or your internet disconnects, the system instantly fails back to the local `classifier.py` so the extension never breaks.

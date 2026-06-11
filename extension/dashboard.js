@@ -2,6 +2,26 @@ const API = 'http://localhost:5000';
 
 let isLoading = false;
 
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-toggle').textContent = theme === 'light' ? '☾' : '☀';
+  chrome.storage.local.set({ agTheme: theme });
+}
+
+chrome.storage.local.get(['agTheme'], (r) => applyTheme(r.agTheme || 'dark'));
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+const TYPE_LABELS = {
+  'off_track_catch': 'Off-track catch',
+  'self-correction': 'Self-correction',
+  'realization': 'Realization',
+  'mirror+recall': 'Mirror',
+  'fade': 'Fade',
+};
+
 async function load() {
   if (isLoading) return;
   isLoading = true;
@@ -58,7 +78,7 @@ function renderSites(siteStates) {
     const ta = a[1].focused + a[1].drifting + a[1].gone, tb = b[1].focused + b[1].drifting + b[1].gone;
     return tb - ta;
   }).slice(0, 15);
-  if (!entries.length) { container.innerHTML = '<p style="color:#666;font-size:13px;">No site data yet</p>'; return; }
+  if (!entries.length) { container.innerHTML = '<p class="empty-msg">No site data yet</p>'; return; }
   container.innerHTML = entries.map(([site, s]) => {
     const total = s.focused + s.drifting + s.gone || 1;
     return `<div class="site-row">
@@ -74,11 +94,12 @@ function renderSites(siteStates) {
 
 function renderInterventions(interventions) {
   const container = document.getElementById('interventions');
-  if (!interventions.length) { container.innerHTML = '<p style="color:#666;font-size:13px;">No interventions yet</p>'; return; }
-  container.innerHTML = interventions.slice(0, 20).map(i => {
+  if (!interventions.length) { container.innerHTML = '<p class="empty-msg">No catches yet</p>'; return; }
+  container.innerHTML = interventions.slice(0, 25).map(i => {
     const time = new Date(i.timestamp).toLocaleTimeString();
+    const typeLabel = TYPE_LABELS[i.type] || i.type;
     return `<div class="intervention-item">
-      <span class="intervention-type">${i.type}</span>
+      <span class="intervention-type">${typeLabel}</span>
       <span class="intervention-action ${i.action}">${i.action}</span>
       <span class="intervention-time">${time}</span>
     </div>`;
@@ -98,7 +119,9 @@ function renderTrend(weeklyTrends) {
 
   const maxVal = Math.max(...days.map(d => weeklyTrends[d].total), 1);
   const barW = Math.min(40, (w - 60) / days.length - 8);
-  const colors = { focused: '#4ade80', drifting: '#fbbf24', gone: '#f87171' };
+  const colors = { focused: getComputedStyle(document.documentElement).getPropertyValue('--focused').trim() || '#6b9e78',
+    drifting: getComputedStyle(document.documentElement).getPropertyValue('--drifting').trim() || '#d4a054',
+    gone: getComputedStyle(document.documentElement).getPropertyValue('--gone').trim() || '#c45c5c' };
 
   days.forEach((day, i) => {
     const d = weeklyTrends[day];

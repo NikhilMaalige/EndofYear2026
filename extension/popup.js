@@ -1,19 +1,41 @@
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = theme === 'light' ? '☾' : '☀';
+  chrome.storage.local.set({ agTheme: theme });
+}
+
+chrome.storage.local.get(['agTheme'], (r) => {
+  applyTheme(r.agTheme || 'dark');
+});
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+function showFeedback(text) {
+  const el = document.getElementById('label-feedback');
+  el.textContent = text;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 2000);
+}
+
 document.querySelectorAll('[data-label]').forEach(btn => {
   btn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'LABEL', label: btn.dataset.label });
-    document.getElementById('label-feedback').textContent = `Logged: ${btn.dataset.label}`;
-    setTimeout(() => document.getElementById('label-feedback').textContent = '', 2000);
+    showFeedback(`Logged: ${btn.dataset.label}`);
   });
 });
 
 function updateGoalDisplay(goal) {
   const display = document.getElementById('current-goal-display');
   if (goal) {
-    display.innerHTML = `Working on: <strong>${goal}</strong>`;
-    display.style.borderLeftColor = '#4ade80';
+    display.innerHTML = `Working on <strong>${goal}</strong>`;
+    display.style.borderLeftColor = 'var(--focused)';
   } else {
     display.textContent = 'Not set';
-    display.style.borderLeftColor = '#60a5fa';
+    display.style.borderLeftColor = 'var(--accent)';
   }
 }
 
@@ -24,8 +46,7 @@ document.getElementById('set-goal').addEventListener('click', () => {
     chrome.storage.local.set({ currentGoal: goal });
     document.getElementById('goal-input').value = '';
     updateGoalDisplay(goal);
-    document.getElementById('label-feedback').textContent = 'Goal set!';
-    setTimeout(() => document.getElementById('label-feedback').textContent = '', 2000);
+    showFeedback('Goal updated');
   }
 });
 
@@ -36,27 +57,19 @@ chrome.storage.local.get(['currentGoal'], (r) => {
 chrome.runtime.sendMessage({ type: 'GET_STATE' });
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'STATE_UPDATE') {
-    let text = msg.state.toUpperCase();
-    if (msg.state === 'drifting') text = '⚠️ ' + text;
-    if (msg.state === 'gone') text = '🚨 ' + text;
-    if (msg.state === 'focused') text = '🎯 ' + text;
-
-    document.getElementById('status').textContent = text;
+    const labels = { focused: 'Focused', drifting: 'Drifting', gone: 'Off track' };
+    document.getElementById('status').textContent = labels[msg.state] || msg.state;
     document.getElementById('status').className = `status-badge ${msg.state}`;
-    
-    if (msg.state === 'drifting') document.body.style.boxShadow = 'inset 0 0 20px rgba(251, 191, 36, 0.4)';
-    else if (msg.state === 'gone') document.body.style.boxShadow = 'inset 0 0 20px rgba(248, 113, 113, 0.4)';
-    else document.body.style.boxShadow = 'none';
+
     if (msg.stats) {
       document.getElementById('stats').innerHTML = `
-        <div>Tab switches (5m): ${msg.stats.tabSwitches}</div>
-        <div>Scroll velocity: ${msg.stats.avgVel}</div>
-        <div>Session: ${msg.stats.sessionMinutes}m</div>
-      `;
+        <div class="stat-item"><div class="val">${msg.stats.tabSwitches}</div><div class="lbl">Tabs</div></div>
+        <div class="stat-item"><div class="val">${msg.stats.avgVel}</div><div class="lbl">Scroll</div></div>
+        <div class="stat-item"><div class="val">${msg.stats.sessionMinutes}m</div><div class="lbl">Session</div></div>`;
     }
   }
 });
-// Snooze button
+
 document.getElementById('snooze-btn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'SET_SNOOZE', minutes: 30 });
   document.getElementById('snooze-label').textContent = 'Snoozed for 30m';
@@ -67,7 +80,6 @@ document.getElementById('snooze-btn').addEventListener('click', () => {
   }, 30 * 60 * 1000);
 });
 
-// Check if already snoozed on open
 chrome.runtime.sendMessage({ type: 'GET_SNOOZE' });
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'SNOOZE_STATUS' && msg.snoozed) {
@@ -76,17 +88,17 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-// Fetch model/label status from backend
 fetch('http://localhost:5000/api/status')
   .then(r => r.json())
   .then(data => {
     const el = document.getElementById('model-status');
     const lc = data.label_counts;
-    const trained = data.model_trained ? '✅ Model trained' : (data.ready_to_train ? '⚡ Ready to train' : `📊 ${lc.total}/10 labels`);
-    el.innerHTML = `<span title="Focused: ${lc.focused} | Drifting: ${lc.drifting} | Gone: ${lc.gone}">${trained}</span>`;
-    el.style.color = data.model_trained ? '#4ade80' : (data.ready_to_train ? '#fbbf24' : '#888');
+    const trained = data.model_trained
+      ? 'Local ML active'
+      : (data.ready_to_train ? 'Ready to retrain' : `${lc.total}/10 labels collected`);
+    el.textContent = trained;
+    el.title = `Focused: ${lc.focused} · Drifting: ${lc.drifting} · Gone: ${lc.gone}`;
   })
   .catch(() => {
-    document.getElementById('model-status').textContent = '⚠️ Backend offline';
-    document.getElementById('model-status').style.color = '#f87171';
+    document.getElementById('model-status').textContent = 'Backend offline';
   });

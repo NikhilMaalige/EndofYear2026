@@ -1,23 +1,37 @@
 # pyrefly: ignore [missing-import]
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import storage, classifier, feature_pipeline
+import storage, classifier, feature_pipeline, gemini_analyzer
 
 app = Flask(__name__)
 CORS(app)
 
 storage.init_db()
+classifier.ensure_bootstrap_model()
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
     features = request.json
-    state, confidence = classifier.predict(features)
-    return jsonify({'state': state, 'confidence': round(confidence, 3)})
+    state, confidence, reason, suggestion, source = gemini_analyzer.analyze(features)
+    return jsonify({
+        'state': state, 
+        'confidence': round(confidence, 3),
+        'reason': reason,
+        'suggestion': suggestion,
+        'source': source
+    })
 
 @app.route('/api/signals', methods=['POST'])
 def receive_signals():
     data = request.json
-    storage.store_signal(data.get('timestamp', 0), data.get('features', {}), data.get('state', 'focused'))
+    storage.store_signal(
+        data.get('timestamp', 0), 
+        data.get('features', {}), 
+        data.get('state', 'focused'),
+        data.get('reason', ''),
+        data.get('suggestion', ''),
+        data.get('source', 'local')
+    )
     return jsonify({'ok': True})
 
 @app.route('/api/label', methods=['POST'])
